@@ -38,6 +38,7 @@ public class MovieWebhookBot extends TelegramWebhookBot {
         return SendMessage.builder()
                 .chatId(String.valueOf(chatId))
                 .text(response)
+                .parseMode("MarkdownV2")
                 .disableWebPagePreview(true)
                 .build();
     }

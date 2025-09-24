@@ -5,27 +5,26 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
-
 @Component
 @RequiredArgsConstructor
 public class UpdateRouter {
 
+    private final ProfileCommandHandler profileHandler;
     private final RecommendationService recommendationService;
 
     public String handle(Update update) {
-        String text = null;
-        if (update.hasMessage() && update.getMessage().hasText()) {
-            text = update.getMessage().getText().trim();
-        } else if (update.hasCallbackQuery()) {
-            text = update.getCallbackQuery().getData();
+        if (update == null || !update.hasMessage() || !update.getMessage().hasText()) return null;
+        long chatId = update.getMessage().getChatId();
+        String text = update.getMessage().getText().trim();
+
+        if (text.startsWith("/")) {
+            String reply = profileHandler.handle(chatId, text);
+            if (reply != null) return reply;
+            if ("/start".equalsIgnoreCase(text)) return "👋 Привет\\! Напиши жанр/настроение или команду /help";
+            if ("/recommend".equalsIgnoreCase(text)) return recommendationService.reply(chatId, "дай рекомендации");
+            return "Неизвестная команда\\. /help";
         }
 
-        if (text == null || text.isBlank()) return "Пока понимаю только текстовые сообщения 🙂";
-
-        if ("/start".equalsIgnoreCase(text)) {
-            return "👋 Привет! Напиши жанр/настроение/пример фильма — подберу 3-5 вариантов с краткими пояснениями.";
-        }
-
-        return recommendationService.reply(update.getMessage().getChatId(), text);
+        return recommendationService.reply(chatId, text);
     }
 }

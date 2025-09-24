@@ -3,11 +3,11 @@ package com.gnemirko.movieRecsBot.service;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
+import org.apache.catalina.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
-import java.util.Locale;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -16,54 +16,77 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final UserProfileRepository repo;
 
     @Transactional
-    public UserProfile getOrCreate(long chatId) {
-        return repo.findByChatId(chatId).orElseGet(() -> repo.save(
-                UserProfile.builder().chatId(chatId).build()
-        ));
+    public UserProfile getOrCreate(Long chatId) {
+        return repo.findById(chatId)
+                .orElseGet(() -> repo.save(UserProfile.builder().telegramUserId(chatId).build()));
     }
 
     @Transactional
-    public UserProfile addGenres(long chatId, String... genres) {
-        var u = getOrCreate(chatId);
-        Arrays.stream(genres).map(this::norm).forEach(u.getPreferredGenres()::add);
-        return repo.save(u);
+    public UserProfile addGenres(Long tgUserId, Collection<String> genres) {
+        UserProfile p = getOrCreate(tgUserId);
+        p.getLikedGenres().addAll(normalize(genres));
+        return p;
     }
 
     @Transactional
-    public UserProfile addActors(long chatId, String... actors) {
-        var u = getOrCreate(chatId);
-        Arrays.stream(actors).map(this::norm).forEach(u.getPreferredActors()::add);
-        return repo.save(u);
+    public UserProfile addActors(Long tgUserId, Collection<String> actors) {
+        UserProfile p = getOrCreate(tgUserId);
+        p.getLikedActors().addAll(normalize(actors));
+        return p;
     }
 
     @Transactional
-    public UserProfile addDirectors(long chatId, String... directors) {
-        var u = getOrCreate(chatId);
-        Arrays.stream(directors).map(this::norm).forEach(u.getPreferredDirectors()::add);
-        return repo.save(u);
+    public UserProfile addDirectors(Long tgUserId, Collection<String> directors) {
+        UserProfile p = getOrCreate(tgUserId);
+        p.getLikedDirectors().addAll(normalize(directors));
+        return p;
     }
 
     @Transactional
-    public UserProfile addAnti(long chatId, String... tags) {
-        var u = getOrCreate(chatId);
-        Arrays.stream(tags).map(this::norm).forEach(u.getAntiPreferences()::add);
-        return repo.save(u);
+    public UserProfile blockTags(Long tgUserId, Collection<String> tags) {
+        UserProfile p = getOrCreate(tgUserId);
+        p.getBlocked().addAll(normalize(tags));
+        return p;
     }
 
     @Transactional
-    public UserProfile removeTag(long chatId, String tag) {
-        var u = getOrCreate(chatId);
-        var t = norm(tag);
-        u.getPreferredGenres().remove(t);
-        u.getPreferredActors().remove(t);
-        u.getPreferredDirectors().remove(t);
-        u.getAntiPreferences().remove(t);
-        return repo.save(u);
+    public UserProfile unblockTag(Long tgUserId, String tag) {
+        String key = normalize(tag);
+        UserProfile p = getOrCreate(tgUserId);
+        p.getLikedGenres().remove(key);
+        p.getLikedActors().remove(key);
+        p.getLikedDirectors().remove(key);
+        p.getBlocked().remove(key);
+        return p;
     }
 
-    private String norm(String s) {
-        return s == null ? "" : s.trim().replaceAll("\\s+", " ")
-                .replace("ё","е")
-                .toLowerCase(Locale.ROOT);
+    @Transactional
+    public void reset(Long tgUserId) {
+        UserProfile p = getOrCreate(tgUserId);
+        p.getLikedGenres().clear();
+        p.getLikedActors().clear();
+        p.getLikedDirectors().clear();
+        p.getBlocked().clear();
+    }
+
+    private static Set<String> normalize(Collection<String> in) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String s : in) {
+            String t = normalize(s);
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
+    }
+    private static String normalize(String s) {
+        return s == null ? "" : s.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    @Transactional
+    public void reset(long chatId) {
+        var u = getOrCreate(chatId);
+        u.getLikedGenres().clear();
+        u.getLikedActors().clear();
+        u.getLikedDirectors().clear();
+        u.getBlocked().clear();
     }
 }

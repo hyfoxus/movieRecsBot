@@ -1,14 +1,16 @@
 package com.gnemirko.movieRecsBot.service;
 
 import com.gnemirko.movieRecsBot.entity.UserProfile;
-import jakarta.transaction.Transactional;
+
+import java.util.Collection;
+
 
 public interface UserProfileService {
-    UserProfile getOrCreate(long chatId);
-    UserProfile addGenres(long chatId, String... genres);
-    UserProfile addActors(long chatId, String... actors);
-    UserProfile addDirectors(long chatId, String... directors);
-    UserProfile addAnti(long chatId, String... tags);
-    UserProfile removeTag(long chatId, String tag);
-
+    UserProfile getOrCreate(Long chatId);
+    UserProfile addGenres(Long tgUserId, Collection<String> genres);
+    UserProfile addActors(Long tgUserId, Collection<String> actors);
+    UserProfile addDirectors(Long tgUserId, Collection<String> directors);
+    UserProfile blockTags(Long tgUserId, Collection<String> tags);
+    UserProfile unblockTag(Long tgUserId, String tag);
+    void reset(long chatId);
 }

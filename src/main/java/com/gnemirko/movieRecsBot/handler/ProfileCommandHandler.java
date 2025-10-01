@@ -23,7 +23,7 @@ public class ProfileCommandHandler {
         if (cmd == null) {
             Target wait = pending.remove(chatId);
             if (wait != null) {
-                return addWithTarget(chatId, text, wait); // обработать как значения
+                return addWithTarget(chatId, text, wait);
             }
             return null;
         }
@@ -39,6 +39,11 @@ public class ProfileCommandHandler {
             case UNBLOCK -> { return remove(chatId, text); }
         }
         return null;
+    }
+
+    public String profileText(long chatId) {
+        String text = handle(chatId, "/profile");
+        return text == null ? "Профиль пуст." : text;
     }
 
     private String show(long chatId) {
@@ -72,7 +77,7 @@ public class ProfileCommandHandler {
     }
 
     private String addWithTarget(long chatId, String text, Target t) {
-        var vals = CmdText.parseArgs("x " + text); // трюк: парсим как будто после команды
+        var vals = CmdText.parseArgs("x " + text);
         if (vals.isEmpty()) vals = java.util.List.of(text.split("\\s*,\\s*"));
         return add(chatId, vals, t);
     }

@@ -30,16 +30,6 @@ public class MovieWebhookBot extends TelegramWebhookBot {
 
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
-        var response = router.handle(update); // вернёт String
-        Long chatId = update.getMessage() != null
-                ? update.getMessage().getChatId()
-                : update.getCallbackQuery().getMessage().getChatId();
-
-        return SendMessage.builder()
-                .chatId(String.valueOf(chatId))
-                .text(response)
-                .parseMode("MarkdownV2")
-                .disableWebPagePreview(true)
-                .build();
+        return router.handle(update);
     }
 }

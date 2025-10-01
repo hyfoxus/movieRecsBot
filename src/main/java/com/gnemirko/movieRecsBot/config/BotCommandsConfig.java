@@ -27,7 +27,9 @@ public class BotCommandsConfig {
                 new BotCommand("/block", "Добавить анти-предпочтения"),
                 new BotCommand("/unblock", "Убрать метку из любого списка"),
                 new BotCommand("/reset_profile", "Очистить профиль"),
-                new BotCommand("/help", "Краткая справка")
+                new BotCommand("/help", "Краткая справка"),
+                new BotCommand("/menu", "Меню профиля"),
+                new BotCommand("/profile", "Показать текущие настройки")
         );
         bot.execute(SetMyCommands.builder()
                 .commands(list)

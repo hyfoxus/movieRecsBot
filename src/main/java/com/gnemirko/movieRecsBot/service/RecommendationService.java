@@ -2,6 +2,7 @@ package com.gnemirko.movieRecsBot.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gnemirko.movieRecsBot.entity.MovieOpinion;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.dto.RecResponse;
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
@@ -16,6 +17,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -52,11 +54,13 @@ public class RecommendationService {
         if (force) {
             out = recommendMarkdown(history, userText, profileSummary, profile);
             dialogPolicy.reset(chatId);
+            out = appendOpinionReminder(out);
         } else {
             String next = askOneQuestionOrRecommend(history, userText, profileSummary).trim();
             if ("__RECOMMEND__".equalsIgnoreCase(next)) {
                 out = recommendMarkdown(history, userText, profileSummary, profile);
                 dialogPolicy.reset(chatId);
+                out = appendOpinionReminder(out);
             } else {
                 dialogPolicy.countClarifying(chatId);
                 out = escapeMdV2(next);
@@ -193,6 +197,13 @@ public class RecommendationService {
         if (!p.getLikedActors().isEmpty()) sb.append("Любимые актёры: ").append(p.getLikedActors()).append(". ");
         if (!p.getLikedDirectors().isEmpty()) sb.append("Любимые режиссёры: ").append(p.getLikedDirectors()).append(". ");
         if (!p.getBlocked().isEmpty()) sb.append("Не предлагать: ").append(p.getBlocked()).append(". ");
+        if (!p.getWatchedMovies().isEmpty()) {
+            String watched = p.getWatchedMovies().stream()
+                    .limit(5)
+                    .map(this::shortOpinion)
+                    .collect(Collectors.joining("; "));
+            if (!watched.isEmpty()) sb.append("Недавние отзывы: ").append(watched).append(". ");
+        }
         return sb.toString().trim();
     }
 
@@ -216,6 +227,21 @@ public class RecommendationService {
 
     private static String nvl(String s) {
         return s == null ? "" : s;
+    }
+
+    private String shortOpinion(MovieOpinion op) {
+        if (op == null) return "";
+        String title = nvl(op.getTitle()).trim();
+        String review = nvl(op.getOpinion()).trim();
+        if (title.isEmpty() && review.isEmpty()) return "";
+        if (review.isEmpty()) return title;
+        return title + " — " + review;
+    }
+
+    private String appendOpinionReminder(String text) {
+        if (text == null || text.isBlank()) return text;
+        String reminder = escapeMdV2("Когда посмотришь фильм, напиши /watched и поделись мнением — я буду точнее.");
+        return text + "\n\n" + reminder;
     }
 
     private static final String MDV2_SPECIAL = "_*[]()~`>#+-=|{}.!";

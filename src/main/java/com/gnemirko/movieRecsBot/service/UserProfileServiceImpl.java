@@ -1,13 +1,19 @@
 package com.gnemirko.movieRecsBot.service;
 
+import com.gnemirko.movieRecsBot.entity.MovieOpinion;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
-import org.apache.catalina.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -61,12 +67,40 @@ public class UserProfileServiceImpl implements UserProfileService {
     }
 
     @Transactional
+    public UserProfile addMovieOpinion(Long tgUserId, String movieTitle, String opinion) {
+        UserProfile p = getOrCreate(tgUserId);
+        String title = trimToNull(movieTitle);
+        String review = trimToNull(opinion);
+        if (title == null && review == null) return p;
+
+        MovieOpinion entry = MovieOpinion.builder()
+                .title(title == null ? "неизвестно" : title)
+                .opinion(review)
+                .recordedAt(Instant.now())
+                .build();
+        p.getWatchedMovies().add(entry);
+        pruneWatched(p.getWatchedMovies());
+        return p;
+    }
+
+    @Transactional
     public void reset(Long tgUserId) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedGenres().clear();
         p.getLikedActors().clear();
         p.getLikedDirectors().clear();
         p.getBlocked().clear();
+        p.getWatchedMovies().clear();
+    }
+
+    @Transactional
+    public void reset(long chatId) {
+        var u = getOrCreate(chatId);
+        u.getLikedGenres().clear();
+        u.getLikedActors().clear();
+        u.getLikedDirectors().clear();
+        u.getBlocked().clear();
+        u.getWatchedMovies().clear();
     }
 
     private static Set<String> normalize(Collection<String> in) {
@@ -77,16 +111,23 @@ public class UserProfileServiceImpl implements UserProfileService {
         }
         return out;
     }
+
     private static String normalize(String s) {
         return s == null ? "" : s.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
-    @Transactional
-    public void reset(long chatId) {
-        var u = getOrCreate(chatId);
-        u.getLikedGenres().clear();
-        u.getLikedActors().clear();
-        u.getLikedDirectors().clear();
-        u.getBlocked().clear();
+    private static String trimToNull(String in) {
+        if (in == null) return null;
+        String t = in.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private static void pruneWatched(List<MovieOpinion> watched) {
+        if (watched == null) return;
+        int max = 50;
+        if (watched.size() > max) {
+            watched.sort(Comparator.comparing(MovieOpinion::getRecordedAt).reversed());
+            while (watched.size() > max) watched.remove(watched.size() - 1);
+        }
     }
 }

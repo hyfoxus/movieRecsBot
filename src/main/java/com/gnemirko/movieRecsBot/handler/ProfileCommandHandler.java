@@ -1,6 +1,6 @@
 package com.gnemirko.movieRecsBot.handler;
 
-import com.gnemirko.movieRecsBot.handler.ProfileCommands;
+import com.gnemirko.movieRecsBot.entity.MovieOpinion;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.service.UserProfileService;
 import com.gnemirko.movieRecsBot.util.CmdText;
@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -52,6 +53,12 @@ public class ProfileCommandHandler {
         String a = p.getLikedActors().isEmpty() ? "—" : String.join(", ", p.getLikedActors());
         String d = p.getLikedDirectors().isEmpty() ? "—" : String.join(", ", p.getLikedDirectors());
         String b = p.getBlocked().isEmpty() ? "—" : String.join(", ", p.getBlocked());
+        String w = p.getWatchedMovies().isEmpty()
+                ? " —"
+                : "\n  " + p.getWatchedMovies().stream()
+                .limit(3)
+                .map(this::formatOpinion)
+                .collect(Collectors.joining("\n  "));
 
         return """
                 *Профиль*:
@@ -59,7 +66,13 @@ public class ProfileCommandHandler {
                 • Актёры: %s
                 • Режиссёры: %s
                 • Не предлагать: %s
-                """.formatted(CmdText.esc(g), CmdText.esc(a), CmdText.esc(d), CmdText.esc(b)).trim();
+                • Просмотры:%s
+                """.formatted(
+                CmdText.esc(g),
+                CmdText.esc(a),
+                CmdText.esc(d),
+                CmdText.esc(b),
+                w).trim();
     }
 
 
@@ -72,6 +85,7 @@ public class ProfileCommandHandler {
                 /like_director Кристофер Нолан
                 /block хоррор, детское
                 /unblock хоррор
+                /watched — сохранить мнение о просмотренном фильме
                 /reset_profile — очистить профиль
                 """;
     }
@@ -107,4 +121,16 @@ public class ProfileCommandHandler {
     }
 
     private enum Target { GENRE, ACTOR, DIRECTOR, ANTI }
+
+    private String formatOpinion(MovieOpinion op) {
+        if (op == null) return "—";
+        String title = CmdText.esc(nvl(op.getTitle()));
+        String review = CmdText.esc(nvl(op.getOpinion()));
+        if (review.isBlank()) return title;
+        return title + " — " + review;
+    }
+
+    private static String nvl(String s) {
+        return s == null ? "" : s.trim();
+    }
 }

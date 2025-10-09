@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class MenuStateService {
-    public enum Await { ADD_GENRE, ADD_ACTOR, ADD_DIRECTOR, ADD_BLOCK, NONE }
+    public enum Await { ADD_GENRE, ADD_ACTOR, ADD_DIRECTOR, ADD_BLOCK, ADD_OPINION, NONE }
 
     private final Map<Long, Await> awaiting = new ConcurrentHashMap<>();
 

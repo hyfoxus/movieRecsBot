@@ -1,0 +1,8 @@
+- pray ✓
+- fix prompts
+- pray
+- Change OpenAI system to LLM ran locally with the context of oMDB
+- pray
+- Look into Vector Databases
+- Change the fact that formatting isn't working properly and LLM formats her messages wrong
+- pray that it works

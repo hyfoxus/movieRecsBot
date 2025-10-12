@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
 @Slf4j
@@ -21,20 +22,35 @@ public class TelegramConfig {
     @Value("${telegram.bot.webhook-path:/tg/webhook}")
     private String webhookPath;
 
-    private final MovieWebhookBot bot;
+    @Value("${telegram.bot.token}")
+    private String botToken;
 
     @PostConstruct
-    public void init() throws Exception {
+    public void init() {
         String url = buildWebhookUrl(webhookUrl, webhookPath);
         if (url == null) {
             log.warn("Telegram webhook URL is not configured. Set TELEGRAM_WEBHOOK_URL to enable updates.");
             return;
         }
-        TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-        botsApi.registerBot(bot, SetWebhook.builder()
-                .url(url)
-                .build());
-        log.info("Telegram webhook registered at {}", url);
+
+        try {
+            org.telegram.telegrambots.bots.DefaultAbsSender sender = new org.telegram.telegrambots.bots.DefaultAbsSender(
+                    new org.telegram.telegrambots.bots.DefaultBotOptions()) {
+                @Override
+                public String getBotToken() {
+                    return botToken;
+                }
+            };
+
+            sender.execute(SetWebhook.builder()
+                    .url(url)
+                    .build());
+
+            log.info("✓ Telegram webhook registered at {}", url);
+        } catch (TelegramApiException e) {
+            log.error("Failed to set webhook", e);
+            throw new RuntimeException("Failed to configure Telegram webhook", e);
+        }
     }
 
     private static String buildWebhookUrl(String base, String path) {

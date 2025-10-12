@@ -8,7 +8,8 @@ spring:
       chat:
         options:
           model: gpt-4o-mini
-          temperature: 0.4
+          temperature: 0.2
+          top-p: 0.9
 
 
   datasource:
@@ -32,10 +33,10 @@ spring:
 
 telegram:
   bot:
-    username: ${TELEGRAM_BOT_USERNAME:MovieRecketirBot}
+    username: ${TELEGRAM_BOT_USERNAME:}
     token: ${TELEGRAM_BOT_TOKEN:}
-    webhook-path: /tg/webhook
-    webhook-url: ${TELEGRAM_WEBHOOK_URL:https://cdf6fb321953.ngrok-free.app/tg/webhook}
+    webhook-path: ${TELEGRAM_BOT_WEBHOOK_PATH:}
+    webhook-url: ${TELEGRAM_WEBHOOK_URL:}
 
 logging:
   level:

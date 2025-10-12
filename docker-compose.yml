@@ -1,0 +1,11 @@
+services:
+  movie-recs-bot:
+    build: .
+    image: movie-recs-bot:latest
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+    restart: unless-stopped

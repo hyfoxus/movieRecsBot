@@ -6,7 +6,7 @@
 
     <parent>
         <groupId>com.gnemirko</groupId>
-        <artifactId>movies-suite</artifactId>
+        <artifactId>movieRecsBot</artifactId>
         <version>1.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
@@ -14,7 +14,7 @@
     <groupId>com.gnemirko</groupId>
     <artifactId>movieRecBot</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>movieRecsBot</name>
+    <name>movieRecBot</name>
     <description>Telegram bot with Spring AI for movie recommendations</description>
 
     <properties>

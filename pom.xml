@@ -5,10 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.gnemirko</groupId>
-    <artifactId>movies-suite</artifactId>
+    <artifactId>movieRecsBot</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>movies-suite</name>
+    <name>movieRecsBot</name>
 
     <modules>
         <module>movieRecBot</module>

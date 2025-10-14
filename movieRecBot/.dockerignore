@@ -1,0 +1,15 @@
+.git
+.github
+../.idea
+../target
+bin
+build
+out
+.env
+*.iml
+*.ipr
+*.iws
+*.log
+**/.DS_Store
+HELP.md
+toDOList.txt

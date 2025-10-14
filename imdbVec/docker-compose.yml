@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  pg:
+    image: pgvector/pgvector:pg16
+    container_name: imdbvec-pg
+    environment:
+      POSTGRES_DB: movies
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+    ports: ["5432:5432"]
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

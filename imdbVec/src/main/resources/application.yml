@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/movies
+    username: app
+    password: secret
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+  main:
+    banner-mode: console
+
+app:
+  imdb:
+    dir: ./data/imdb
+    files:
+      basics: title.basics.tsv.gz
+      ratings: title.ratings.tsv.gz
+  embedding:
+    modelUrl: https://huggingface.co/onnx-models/all-MiniLM-L6-v2-onnx

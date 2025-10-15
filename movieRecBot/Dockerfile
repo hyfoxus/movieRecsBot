@@ -17,12 +17,15 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM eclipse-temurin:24-jre
 WORKDIR /app
 
+COPY docker/entrypoint.sh /app/entrypoint.sh
 COPY --from=build /workspace/movieRecBot/target /app/target
 RUN set -eux; \
     jar=$(ls /app/target/*.jar | grep -Ev '(original|sources|javadoc|tests)' | head -n1); \
     mv "$jar" /app/app.jar; \
     rm -rf /app/target
 
+RUN chmod +x /app/entrypoint.sh
+
 ENV JAVA_OPTS=""
 EXPOSE 8080
-ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["/app/entrypoint.sh"]

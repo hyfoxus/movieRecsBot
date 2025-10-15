@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-botdb}
       POSTGRES_USER: ${POSTGRES_USER:-botuser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-botuser} -d ${POSTGRES_DB:-botdb}"]
       interval: 5s
@@ -14,6 +14,8 @@ services:
       - dbdata:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    secrets:
+      - postgres_password
 
   bot:
     build:
@@ -25,15 +27,27 @@ services:
     environment:
       SPRING_DATASOURCE_URL: "jdbc:postgresql://db:5432/${POSTGRES_DB:-botdb}"
       SPRING_DATASOURCE_USERNAME: "${POSTGRES_USER:-botuser}"
-      SPRING_DATASOURCE_PASSWORD: "${POSTGRES_PASSWORD:-botpass}"
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SPRING_DATASOURCE_PASSWORD: ""
+      TELEGRAM_BOT_TOKEN: ""
+      OPENAI_API_KEY: ""
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
+    secrets:
+      - open_api_key
+      - telegram_bot_token
+      - postgres_password
 
 volumes:
   dbdata:
+
+secrets:
+  open_api_key:
+    file: ./secrets/OPEN_API_KEY
+  telegram_bot_token:
+    file: ./secrets/TELEGRAM_BOT_TOKEN
+  postgres_password:
+    file: ./secrets/POSTGRES_PASSWORD

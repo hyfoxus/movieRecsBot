@@ -22,12 +22,12 @@ public class SearchController {
         float[] v = es.embed(q);
         PGvector vec = new PGvector(v);
         return repo.knn(vec, k).stream().map(row -> Map.of(
-            "id", row[0],
-            "tconst", row[1],
-            "title", row[2],
-            "plot", row[3],
-            "rating", row[4],
-            "cosine", row[5]
+                "id", row[0],
+                "tconst", row[1],
+                "title", row[2],
+                "plot", row[3],
+                "rating", row[4],
+                "cosine", row[5]
         )).toList();
     }
 }

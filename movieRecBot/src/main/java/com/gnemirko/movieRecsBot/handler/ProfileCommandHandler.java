@@ -6,7 +6,6 @@ import com.gnemirko.movieRecsBot.service.UserProfileService;
 import com.gnemirko.movieRecsBot.util.CmdText;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Locale;
@@ -30,14 +29,31 @@ public class ProfileCommandHandler {
         }
 
         switch (cmd) {
-            case PROFILE -> { return show(chatId); }
-            case HELP -> { return help(); }
-            case RESET -> { userProfileService.reset(chatId); return "Профиль очищен\\."; }
-            case LIKE_GENRE -> { return add(chatId, List.of(text), Target.GENRE); }
-            case LIKE_ACTOR -> { return add(chatId, List.of(text), Target.ACTOR); }
-            case LIKE_DIRECTOR -> { return add(chatId, List.of(text), Target.DIRECTOR); }
-            case BLOCK -> { return add(chatId, List.of(text), Target.ANTI); }
-            case UNBLOCK -> { return remove(chatId, text); }
+            case PROFILE -> {
+                return show(chatId);
+            }
+            case HELP -> {
+                return help();
+            }
+            case RESET -> {
+                userProfileService.reset(chatId);
+                return "Профиль очищен\\.";
+            }
+            case LIKE_GENRE -> {
+                return add(chatId, List.of(text), Target.GENRE);
+            }
+            case LIKE_ACTOR -> {
+                return add(chatId, List.of(text), Target.ACTOR);
+            }
+            case LIKE_DIRECTOR -> {
+                return add(chatId, List.of(text), Target.DIRECTOR);
+            }
+            case BLOCK -> {
+                return add(chatId, List.of(text), Target.ANTI);
+            }
+            case UNBLOCK -> {
+                return remove(chatId, text);
+            }
         }
         return null;
     }
@@ -117,10 +133,10 @@ public class ProfileCommandHandler {
     }
 
     private String norm(String s) {
-        return s.trim().replaceAll("\\s+", " ").replace("ё","е").toLowerCase(Locale.ROOT);
+        return s.trim().replaceAll("\\s+", " ").replace("ё", "е").toLowerCase(Locale.ROOT);
     }
 
-    private enum Target { GENRE, ACTOR, DIRECTOR, ANTI }
+    private enum Target {GENRE, ACTOR, DIRECTOR, ANTI}
 
     private String formatOpinion(MovieOpinion op) {
         if (op == null) return "—";

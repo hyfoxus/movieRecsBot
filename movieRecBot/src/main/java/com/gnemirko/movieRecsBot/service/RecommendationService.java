@@ -2,9 +2,9 @@ package com.gnemirko.movieRecsBot.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gnemirko.movieRecsBot.dto.RecResponse;
 import com.gnemirko.movieRecsBot.entity.MovieOpinion;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
-import com.gnemirko.movieRecsBot.dto.RecResponse;
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
 import com.gnemirko.movieRecsBot.util.Jsons;
 import lombok.RequiredArgsConstructor;
@@ -12,11 +12,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,14 +26,14 @@ public class RecommendationService {
 
     private static final String SYSTEM = """
             Ты — MovieMate, помощник по рекомендациям фильмов.
-
+            
             ПРАВИЛА:
             1) Разрешено задать максимум ДВА уточняющих вопроса за весь диалог. Если пользователь просит «дай рекомендации» или «не задавай вопросы» — сразу выдай рекомендации.
             2) Если данных мало — сделай разумные предположения (современные, не детские, язык любой) и выдай рекомендации.
             3) Не повторяй вопросы. Не задавай вопросы после явного запроса рекомендаций.
             4) Всегда соблюдай жанровые и анти-предпочтения пользователя. Если запросил фэнтези — не предлагай нефэнтези.
             5) Краткость: 3–5 фильмов, для каждого — 1 короткое объяснение, почему подходит.
-
+            
             ФОРМАТ ДЛЯ TELEGRAM (MarkdownV2):
             - Вступление — одна строка.
             - Далее пронумерованный список.
@@ -111,7 +107,10 @@ public class RecommendationService {
                 .call()
                 .content();
 
-        try { Jsons.read(json, RecResponse.class); } catch (Exception ignored) {}
+        try {
+            Jsons.read(json, RecResponse.class);
+        } catch (Exception ignored) {
+        }
 
         Parsed parsed = parseAndFilter(json, profile, userText);
         if (parsed.movies.isEmpty()) {
@@ -173,7 +172,8 @@ public class RecommendationService {
         for (Movie m : movies) {
             if (m == null || isBlank(m.title)) continue;
             if (askedFantasy && (m.genres == null || m.genres.stream().noneMatch(g -> eq(g, "fantasy")))) continue;
-            if (!mustGenres.isEmpty() && (m.genres == null || m.genres.stream().noneMatch(g -> containsIgnoreCase(mustGenres, g)))) continue;
+            if (!mustGenres.isEmpty() && (m.genres == null || m.genres.stream().noneMatch(g -> containsIgnoreCase(mustGenres, g))))
+                continue;
             if (!anti.isEmpty()) {
                 boolean banned = containsIgnoreCase(anti, m.title) || (m.genres != null && m.genres.stream().anyMatch(g -> containsIgnoreCase(anti, g)));
                 if (banned) continue;
@@ -195,7 +195,8 @@ public class RecommendationService {
         StringBuilder sb = new StringBuilder();
         if (!p.getLikedGenres().isEmpty()) sb.append("Желаемые жанры: ").append(p.getLikedGenres()).append(". ");
         if (!p.getLikedActors().isEmpty()) sb.append("Любимые актёры: ").append(p.getLikedActors()).append(". ");
-        if (!p.getLikedDirectors().isEmpty()) sb.append("Любимые режиссёры: ").append(p.getLikedDirectors()).append(". ");
+        if (!p.getLikedDirectors().isEmpty())
+            sb.append("Любимые режиссёры: ").append(p.getLikedDirectors()).append(". ");
         if (!p.getBlocked().isEmpty()) sb.append("Не предлагать: ").append(p.getBlocked()).append(". ");
         if (!p.getWatchedMovies().isEmpty()) {
             String watched = p.getWatchedMovies().stream()

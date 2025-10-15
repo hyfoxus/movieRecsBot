@@ -14,7 +14,10 @@ public enum ProfileCommands {
     HELP("/help");
 
     public final String cmd;
-    ProfileCommands(String cmd) { this.cmd = cmd; }
+
+    ProfileCommands(String cmd) {
+        this.cmd = cmd;
+    }
 
     public static ProfileCommands match(String text) {
         if (text == null) return null;

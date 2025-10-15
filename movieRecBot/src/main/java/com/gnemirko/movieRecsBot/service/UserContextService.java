@@ -25,7 +25,7 @@ public class UserContextService {
     public String historyAsOneString(long chatId, int maxRecords, int truncateEach) {
         return repo.findTop50ByChatIdOrderByCreatedAtDesc(chatId).stream()
                 .limit(maxRecords)
-                .sorted((a,b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                .sorted((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
                 .map(m -> m.getText().length() > truncateEach ? m.getText().substring(0, truncateEach) + "…" : m.getText())
                 .collect(Collectors.joining("\n"));
     }

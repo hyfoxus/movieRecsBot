@@ -66,7 +66,8 @@ public class ImdbImportService {
                 String num = rec.get("numVotes");
                 try {
                     map.put(tconst, new double[]{Double.parseDouble(avg), Double.parseDouble(num)});
-                } catch (NumberFormatException ignore) {}
+                } catch (NumberFormatException ignore) {
+                }
             }
         }
         return map;
@@ -86,13 +87,21 @@ public class ImdbImportService {
                 Movie m = new Movie();
                 m.setTconst(tconst);
                 m.setTitle(title);
-                try { m.setYear(Integer.parseInt(startYear)); } catch (Exception ignore) {}
+                try {
+                    m.setYear(Integer.parseInt(startYear));
+                } catch (Exception ignore) {
+                }
                 m.setGenres(List.of("\\N".equals(genres) ? new String[]{} : genres.split(",")));
 
                 double[] rvals = ratings.get(tconst);
-                if (rvals != null) { m.setRating(rvals[0]); m.setVotes((int) rvals[1]); }
+                if (rvals != null) {
+                    m.setRating(rvals[0]);
+                    m.setVotes((int) rvals[1]);
+                }
 
-                try { repo.save(m); } catch (Exception e) { /* duplicates etc. */ }
+                try {
+                    repo.save(m);
+                } catch (Exception e) { /* duplicates etc. */ }
             }
         }
     }

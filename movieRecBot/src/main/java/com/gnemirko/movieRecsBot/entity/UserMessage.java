@@ -7,7 +7,11 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "user_message")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class UserMessage {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

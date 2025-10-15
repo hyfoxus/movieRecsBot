@@ -6,5 +6,8 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class BotBeans {
-    @Bean DialogPolicy dialogPolicy() { return new DialogPolicy(); }
+    @Bean
+    DialogPolicy dialogPolicy() {
+        return new DialogPolicy();
+    }
 }

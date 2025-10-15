@@ -13,19 +13,19 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
     List<Movie> findBatchWithoutEmbedding();
 
     @Query(value = """
-
-        SELECT id, tconst, title, plot, rating,
-
-               1 - (embedding <=> :q) AS cosine
-
-        FROM movie
-
-        WHERE embedding IS NOT NULL
-
-        ORDER BY embedding <=> :q
-
-        LIMIT :k
-
-        """, nativeQuery = true)
+            
+            SELECT id, tconst, title, plot, rating,
+            
+                   1 - (embedding <=> :q) AS cosine
+            
+            FROM movie
+            
+            WHERE embedding IS NOT NULL
+            
+            ORDER BY embedding <=> :q
+            
+            LIMIT :k
+            
+            """, nativeQuery = true)
     List<Object[]> knn(@Param("q") PGvector queryVec, @Param("k") int k);
 }

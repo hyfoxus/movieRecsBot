@@ -32,12 +32,12 @@ public class EmbeddingService {
     @PostConstruct
     void init() throws IOException, ModelException {
         model = Criteria.builder()
-            .setTypes(String.class, float[].class)
-            .optEngine("OnnxRuntime")
-            .optModelUrls(modelUrl)
-            .optTranslatorFactory(new ai.djl.huggingface.translator.TextEmbeddingTranslatorFactory())
-            .build()
-            .loadModel();
+                .setTypes(String.class, float[].class)
+                .optEngine("OnnxRuntime")
+                .optModelUrls(modelUrl)
+                .optTranslatorFactory(new ai.djl.huggingface.translator.TextEmbeddingTranslatorFactory())
+                .build()
+                .loadModel();
         predictor = model.newPredictor();
     }
 
@@ -47,7 +47,9 @@ public class EmbeddingService {
         if (model != null) model.close();
     }
 
-    public float[] embed(String text) throws TranslateException { return predictor.predict(text == null ? "" : text); }
+    public float[] embed(String text) throws TranslateException {
+        return predictor.predict(text == null ? "" : text);
+    }
 
     @Transactional
     public void backfillEmbeddings() throws TranslateException {

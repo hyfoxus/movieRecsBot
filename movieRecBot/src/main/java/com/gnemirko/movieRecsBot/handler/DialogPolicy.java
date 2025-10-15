@@ -15,7 +15,9 @@ public class DialogPolicy {
             "давай фильмы", "give recommendation", "recommend now"
     );
 
-    public void reset(long chatId) { clarifyingTurns.remove(chatId); }
+    public void reset(long chatId) {
+        clarifyingTurns.remove(chatId);
+    }
 
     public boolean recommendNow(long chatId, String userText) {
         String t = userText.toLowerCase();

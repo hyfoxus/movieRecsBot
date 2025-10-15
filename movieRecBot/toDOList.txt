@@ -7,3 +7,6 @@
 - Look into Vector Databases
 - Change the fact that formatting isn't working properly and LLM formats her messages wrong
 - pray that it works
+- Remake the automatic answers to certain questions, so it will be more dynamic
+- Add auto-save of watched movies
+- Add ability to change the AI engine

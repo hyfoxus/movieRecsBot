@@ -1,26 +1,28 @@
-#
-# Multi-stage build that produces a runnable Spring Boot jar image.
-# Build with: docker build -t movie-recs-bot .
-# Run with: docker run --rm -p 8080:8080 --env-file .env movie-recs-bot
-#
+
+FROM maven:3.9.9-eclipse-temurin-24 AS deps
+WORKDIR /workspace
+
+COPY pom.xml ./
+COPY imdbVec/pom.xml imdbVec/
+COPY movieRecBot/pom.xml movieRecBot/
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -q -am -pl movieRecBot -DskipTests dependency:go-offline
 
 FROM maven:3.9.9-eclipse-temurin-24 AS build
 WORKDIR /workspace
+COPY . .
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -q -am -pl movieRecBot -DskipTests package spring-boot:repackage
 
-# Copy project files
-COPY pom.xml .
-COPY src ./src
-COPY mvnw .
-COPY .mvn ./.mvn
-
-RUN chmod +x mvnw
-RUN ./mvnw -B -DskipTests clean package
-
-FROM eclipse-temurin:24-jdk AS runtime
+FROM eclipse-temurin:24-jre
 WORKDIR /app
 
-COPY --from=build /workspace/target/*.jar app.jar
+COPY --from=build /workspace/movieRecBot/target /app/target
+RUN set -eux; \
+    jar=$(ls /app/target/*.jar | grep -Ev '(original|sources|javadoc|tests)' | head -n1); \
+    mv "$jar" /app/app.jar; \
+    rm -rf /app/target
 
+ENV JAVA_OPTS=""
 EXPOSE 8080
-
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]

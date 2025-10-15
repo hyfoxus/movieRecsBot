@@ -1,11 +1,39 @@
 services:
-  movie-recs-bot:
-    build: .
-    image: movie-recs-bot:latest
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-botdb}
+      POSTGRES_USER: ${POSTGRES_USER:-botuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-botuser} -d ${POSTGRES_DB:-botdb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - dbdata:/var/lib/postgresql/data
     ports:
-      - "8080:8080"
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  bot:
+    build:
+      context: ..
+      dockerfile: movieRecBot/Dockerfile
+    image: movie-recbot:dev
     env_file:
       - .env
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://db:5432/${POSTGRES_DB:-botdb}"
+      SPRING_DATASOURCE_USERNAME: "${POSTGRES_USER:-botuser}"
+      SPRING_DATASOURCE_PASSWORD: "${POSTGRES_PASSWORD:-botpass}"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
+
+volumes:
+  dbdata:

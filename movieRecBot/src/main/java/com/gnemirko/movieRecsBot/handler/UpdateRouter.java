@@ -238,5 +238,6 @@ public class UpdateRouter {
                 .build(), true);
     }
 
-    private record OpinionResult(SendMessage message, boolean success) {}
+    private record OpinionResult(SendMessage message, boolean success) {
+    }
 }

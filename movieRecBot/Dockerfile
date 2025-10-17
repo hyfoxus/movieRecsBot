@@ -1,4 +1,3 @@
-
 FROM maven:3.9.9-eclipse-temurin-24 AS deps
 WORKDIR /workspace
 
@@ -17,7 +16,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM eclipse-temurin:24-jre
 WORKDIR /app
 
-COPY docker/entrypoint.sh /app/entrypoint.sh
+COPY movieRecBot/docker/entrypoint.sh /app/entrypoint.sh
 COPY --from=build /workspace/movieRecBot/target /app/target
 RUN set -eux; \
     jar=$(ls /app/target/*.jar | grep -Ev '(original|sources|javadoc|tests)' | head -n1); \

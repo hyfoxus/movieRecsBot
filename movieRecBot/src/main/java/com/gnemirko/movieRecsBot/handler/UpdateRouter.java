@@ -1,8 +1,10 @@
 package com.gnemirko.movieRecsBot.handler;
 
 import com.gnemirko.movieRecsBot.service.RecommendationService;
+import com.gnemirko.movieRecsBot.service.TaskManagerService;
 import com.gnemirko.movieRecsBot.service.UserProfileService;
 import com.gnemirko.movieRecsBot.util.CmdText;
+import com.gnemirko.movieRecsBot.handler.StatusCommands;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
@@ -19,6 +21,8 @@ public class UpdateRouter {
     private final UserProfileService userProfileService;
     private final MiniMenu miniMenu;
     private final MenuStateService stateService;
+    private final TaskManagerService taskManagerService;
+    private final StatusCommands statusCommands;
 
     public BotApiMethod<?> handle(Update update) {
         if (update == null) return null;
@@ -136,15 +140,35 @@ public class UpdateRouter {
                             .disableWebPagePreview(true)
                             .build();
                 }
-                if ("/recommend".equalsIgnoreCase(text)) {
-                    String out = recommendationService.reply(chatId, "дай рекомендации");
+
+                if (text.startsWith("/status")) {
+                    String arg = null;
+                    int sp = text.indexOf(' ');
+                    if (sp > 0) {
+                        arg = text.substring(sp + 1).trim();
+                        if (arg.isEmpty()) arg = null;
+                    }
+                    String ans = statusCommands.statusForChat(chatId, arg);
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
-                            .text(out)
+                            .text(ans)
                             .parseMode("MarkdownV2")
                             .disableWebPagePreview(true)
                             .build();
                 }
+
+                if ("/recommend".equalsIgnoreCase(text)) {
+                    var task = taskManagerService.enqueue(chatId, null, "дай рекомендации");
+                    return SendMessage.builder()
+                            .chatId(String.valueOf(chatId))
+                            .text("✅ Запрос принят\\. Задача №" + task.getId() + " в очереди\\.\\n" +
+                                    "Напиши `/status " + task.getId() + "` чтобы посмотреть прогресс\\.")
+                            .parseMode("MarkdownV2")
+                            .replyMarkup(miniMenu.mainMenu())
+                            .disableWebPagePreview(true)
+                            .build();
+                }
+
                 return SendMessage.builder()
                         .chatId(String.valueOf(chatId))
                         .text("Неизвестная команда\\. /help")
@@ -153,11 +177,13 @@ public class UpdateRouter {
                         .build();
             }
 
-            String out = recommendationService.reply(chatId, text);
+            var task = taskManagerService.enqueue(chatId, null, text);
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
-                    .text(out)
+                    .text("✅ Запрос принят\\. Задача №" + task.getId() + " в очереди\\.\\n" +
+                            "Напиши `/status " + task.getId() + "` чтобы посмотреть прогресс\\.")
                     .parseMode("MarkdownV2")
+                    .replyMarkup(miniMenu.mainMenu())
                     .disableWebPagePreview(true)
                     .build();
         }
@@ -238,6 +264,5 @@ public class UpdateRouter {
                 .build(), true);
     }
 
-    private record OpinionResult(SendMessage message, boolean success) {
-    }
+    private record OpinionResult(SendMessage message, boolean success) {}
 }

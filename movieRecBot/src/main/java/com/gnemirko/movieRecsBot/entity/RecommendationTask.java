@@ -15,6 +15,9 @@ public class RecommendationTask {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "display_id", unique = true, length = 12)
+    private String displayId;
+
     private Long chatId;
     private Long userId;
 

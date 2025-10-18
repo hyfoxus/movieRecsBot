@@ -159,10 +159,11 @@ public class UpdateRouter {
 
                 if ("/recommend".equalsIgnoreCase(text)) {
                     var task = taskManagerService.enqueue(chatId, null, "дай рекомендации");
+                    String displayId = task.getDisplayId();
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
-                            .text("✅ Запрос принят\\. Задача №" + task.getId() + " в очереди\\.\\n" +
-                                    "Напиши `/status " + task.getId() + "` чтобы посмотреть прогресс\\.")
+                            .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\\n" +
+                                    "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
                             .parseMode("MarkdownV2")
                             .replyMarkup(miniMenu.mainMenu())
                             .disableWebPagePreview(true)
@@ -178,10 +179,11 @@ public class UpdateRouter {
             }
 
             var task = taskManagerService.enqueue(chatId, null, text);
+            String displayId = task.getDisplayId();
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
-                    .text("✅ Запрос принят\\. Задача №" + task.getId() + " в очереди\\.\\n" +
-                            "Напиши `/status " + task.getId() + "` чтобы посмотреть прогресс\\.")
+                    .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\n" +
+                            "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
                     .parseMode("MarkdownV2")
                     .replyMarkup(miniMenu.mainMenu())
                     .disableWebPagePreview(true)

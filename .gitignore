@@ -3,6 +3,8 @@ target/
 movieRecBot/.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+secrets/
+.env
 
 ### STS ###
 .apt_generated

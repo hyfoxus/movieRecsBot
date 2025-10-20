@@ -104,7 +104,9 @@ public class UpdateRouter {
             }
 
             if (text.startsWith("/")) {
-                if ("/menu".equalsIgnoreCase(text)) {
+                String command = text.split("\\s+", 2)[0].toLowerCase();
+
+                if ("/menu".equals(command)) {
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
                             .text("Что меняем\\? Выбери действие ниже.")
@@ -113,26 +115,21 @@ public class UpdateRouter {
                             .disableWebPagePreview(true)
                             .build();
                 }
-                if ("/watched".equalsIgnoreCase(text)) {
-                    return prompt(chatId,
-                            "Расскажи: первая строка — фильм, вторая — мнение. Пример:\\nInception\\nОчень понравился\\.",
-                            MenuStateService.Await.ADD_OPINION);
+
+                if ("/profile".equals(command)) {
+                    return profileMessage(chatId);
                 }
 
-                String reply = profileHandler.handle(chatId, text);
-                if (reply != null) {
-                    var builder = SendMessage.builder()
+                if ("/help".equals(command)) {
+                    return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
-                            .text(reply)
+                            .text(profileHandler.helpText())
                             .parseMode("MarkdownV2")
-                            .disableWebPagePreview(true);
-                    if ("/profile".equalsIgnoreCase(text)) {
-                        builder.replyMarkup(miniMenu.mainMenu());
-                    }
-                    return builder.build();
+                            .disableWebPagePreview(true)
+                            .build();
                 }
 
-                if ("/start".equalsIgnoreCase(text)) {
+                if ("/start".equals(command)) {
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
                             .text("👋 Привет\\! Напиши жанр/настроение или команду /help")
@@ -141,11 +138,10 @@ public class UpdateRouter {
                             .build();
                 }
 
-                if (text.startsWith("/status")) {
+                if ("/status".equals(command)) {
                     String arg = null;
-                    int sp = text.indexOf(' ');
-                    if (sp > 0) {
-                        arg = text.substring(sp + 1).trim();
+                    if (text.length() > command.length()) {
+                        arg = text.substring(command.length()).trim();
                         if (arg.isEmpty()) arg = null;
                     }
                     String ans = statusCommands.statusForChat(chatId, arg);
@@ -157,13 +153,55 @@ public class UpdateRouter {
                             .build();
                 }
 
-                if ("/recommend".equalsIgnoreCase(text)) {
+                if ("/recommend".equals(command)) {
                     var task = taskManagerService.enqueue(chatId, null, "дай рекомендации");
                     String displayId = task.getDisplayId();
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
                             .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\\n" +
                                     "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
+                            .parseMode("MarkdownV2")
+                            .replyMarkup(miniMenu.mainMenu())
+                            .disableWebPagePreview(true)
+                            .build();
+                }
+
+                if ("/watched".equals(command)) {
+                    return prompt(chatId,
+                            "Расскажи: первая строка — фильм, вторая — мнение. Пример:\\nInception\\nОчень понравился\\.",
+                            MenuStateService.Await.ADD_OPINION);
+                }
+
+                if ("/like_genre".equals(command)) {
+                    return prompt(chatId,
+                            "Введи жанры через запятую\\.",
+                            MenuStateService.Await.ADD_GENRE);
+                }
+
+                if ("/like_actor".equals(command)) {
+                    return prompt(chatId,
+                            "Введи актёров через запятую\\.",
+                            MenuStateService.Await.ADD_ACTOR);
+                }
+
+                if ("/like_director".equals(command)) {
+                    return prompt(chatId,
+                            "Введи режиссёров через запятую\\.",
+                            MenuStateService.Await.ADD_DIRECTOR);
+                }
+
+                if ("/block".equals(command)) {
+                    return prompt(chatId,
+                            "Введи анти\\-метки через запятую\\.",
+                            MenuStateService.Await.ADD_BLOCK);
+                }
+
+                if ("/reset_profile".equals(command)) {
+                    userProfileService.reset(chatId);
+                    stateService.clear(chatId);
+                    return SendMessage.builder()
+                            .chatId(String.valueOf(chatId))
+                            .text("Профиль очищен\\.")
                             .parseMode("MarkdownV2")
                             .replyMarkup(miniMenu.mainMenu())
                             .disableWebPagePreview(true)

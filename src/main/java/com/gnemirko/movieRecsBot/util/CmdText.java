@@ -10,9 +10,8 @@ public final class CmdText {
     public static List<String> parseArgs(String text) {
         if (text == null) return List.of();
         int sp = text.indexOf(' ');
-        if (sp < 0) return List.of();
-        String tail = text.substring(sp + 1);
-        return Arrays.stream(tail.split("[,;]"))
+        String payload = sp < 0 ? text : text.substring(sp + 1);
+        return Arrays.stream(payload.split("[,;]"))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());

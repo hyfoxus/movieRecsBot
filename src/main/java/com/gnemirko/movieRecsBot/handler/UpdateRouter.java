@@ -34,15 +34,15 @@ public class UpdateRouter {
             return switch (data) {
                 case "menu:show" -> profileMessage(chatId);
                 case "menu:add_genre" ->
-                        prompt(chatId, "Введи жанры через запятую\\.", MenuStateService.Await.ADD_GENRE);
+                        prompt(chatId, "Введи жанры через запятую.", MenuStateService.Await.ADD_GENRE);
                 case "menu:add_actor" ->
-                        prompt(chatId, "Введи актёров через запятую\\.", MenuStateService.Await.ADD_ACTOR);
+                        prompt(chatId, "Введи актёров через запятую.", MenuStateService.Await.ADD_ACTOR);
                 case "menu:add_director" ->
-                        prompt(chatId, "Введи режиссёров через запятую\\.", MenuStateService.Await.ADD_DIRECTOR);
+                        prompt(chatId, "Введи режиссёров через запятую.", MenuStateService.Await.ADD_DIRECTOR);
                 case "menu:add_block" ->
-                        prompt(chatId, "Введи анти\\-метки через запятую\\.", MenuStateService.Await.ADD_BLOCK);
+                        prompt(chatId, "Введи анти-метки через запятую.", MenuStateService.Await.ADD_BLOCK);
                 case "menu:add_opinion" -> prompt(chatId,
-                        "Напиши название фильма на первой строке, мнение — на второй. Пример:\\nInception\\nОчень понравился\\.",
+                        "Напиши название фильма на первой строке, мнение — на второй. Пример:\nInception\nОчень понравился.",
                         MenuStateService.Await.ADD_OPINION);
                 case "menu:reset" -> {
                     userProfileService.reset(chatId);
@@ -109,8 +109,7 @@ public class UpdateRouter {
                 if ("/menu".equals(command)) {
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
-                            .text("Что меняем\\? Выбери действие ниже.")
-                            .parseMode("MarkdownV2")
+                            .text("Что меняем? Выбери действие ниже.")
                             .replyMarkup(miniMenu.mainMenu())
                             .disableWebPagePreview(true)
                             .build();
@@ -132,8 +131,7 @@ public class UpdateRouter {
                 if ("/start".equals(command)) {
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
-                            .text("👋 Привет\\! Напиши жанр/настроение или команду /help")
-                            .parseMode("MarkdownV2")
+                            .text("👋 Привет! Напиши жанр/настроение или команду /help")
                             .disableWebPagePreview(true)
                             .build();
                 }
@@ -167,32 +165,42 @@ public class UpdateRouter {
                 }
 
                 if ("/watched".equals(command)) {
+                    String payload = text.length() > command.length()
+                            ? text.substring(command.length()).trim()
+                            : "";
+                    if (payload.isEmpty()) {
                     return prompt(chatId,
-                            "Расскажи: первая строка — фильм, вторая — мнение. Пример:\\nInception\\nОчень понравился\\.",
+                            "Расскажи: первая строка — фильм, вторая — мнение. Пример:\nInception\nОчень понравился.",
                             MenuStateService.Await.ADD_OPINION);
+                    }
+                    OpinionResult result = saveOpinion(chatId, payload);
+                    if (result.success()) {
+                        stateService.clear(chatId);
+                    }
+                    return result.message();
                 }
 
                 if ("/like_genre".equals(command)) {
                     return prompt(chatId,
-                            "Введи жанры через запятую\\.",
+                            "Введи жанры через запятую.",
                             MenuStateService.Await.ADD_GENRE);
                 }
 
                 if ("/like_actor".equals(command)) {
                     return prompt(chatId,
-                            "Введи актёров через запятую\\.",
+                            "Введи актёров через запятую.",
                             MenuStateService.Await.ADD_ACTOR);
                 }
 
                 if ("/like_director".equals(command)) {
                     return prompt(chatId,
-                            "Введи режиссёров через запятую\\.",
+                            "Введи режиссёров через запятую.",
                             MenuStateService.Await.ADD_DIRECTOR);
                 }
 
                 if ("/block".equals(command)) {
                     return prompt(chatId,
-                            "Введи анти\\-метки через запятую\\.",
+                            "Введи анти-метки через запятую.",
                             MenuStateService.Await.ADD_BLOCK);
                 }
 
@@ -220,10 +228,10 @@ public class UpdateRouter {
             String displayId = task.getDisplayId();
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
-                    .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\n" +
-                            "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
-                    .parseMode("MarkdownV2")
-                    .replyMarkup(miniMenu.mainMenu())
+//                    .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\n" +
+//                            "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
+//                    .parseMode("MarkdownV2")
+//                    .replyMarkup(miniMenu.mainMenu())
                     .disableWebPagePreview(true)
                     .build();
         }
@@ -236,7 +244,6 @@ public class UpdateRouter {
         return SendMessage.builder()
                 .chatId(String.valueOf(chatId))
                 .text(text)
-                .parseMode("MarkdownV2")
                 .replyMarkup(ForceReplyKeyboard.builder().forceReply(true).build())
                 .disableWebPagePreview(true)
                 .build();

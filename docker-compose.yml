@@ -19,17 +19,17 @@ services:
 
   bot:
     build:
-      context: ..
-      dockerfile: movieRecBot/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: movie-recbot:dev
     env_file:
       - .env
     environment:
-      SPRING_DATASOURCE_URL: "jdbc:postgresql://db:5432/${POSTGRES_DB:-botdb}"
-      SPRING_DATASOURCE_USERNAME: "${POSTGRES_USER:-botuser}"
-      SPRING_DATASOURCE_PASSWORD: ""
-      TELEGRAM_BOT_TOKEN: ""
-      OPENAI_API_KEY: ""
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-postgres}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${POSTGRES_DB:-botdb}
+      DB_USERNAME: ${POSTGRES_USER:-botuser}
     depends_on:
       db:
         condition: service_healthy

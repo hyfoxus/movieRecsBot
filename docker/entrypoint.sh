@@ -12,6 +12,7 @@ fi
 if [ -f /run/secrets/postgres_password ]; then
   secret_pwd="$(cat /run/secrets/postgres_password)"
   export POSTGRES_PASSWORD="$secret_pwd"
+  export DB_PASSWORD="$secret_pwd"
   export SPRING_DATASOURCE_PASSWORD="$secret_pwd"
 fi
 

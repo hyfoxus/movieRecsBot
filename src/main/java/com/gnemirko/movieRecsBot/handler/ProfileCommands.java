@@ -11,7 +11,8 @@ public enum ProfileCommands {
     BLOCK("/block"),
     UNBLOCK("/unblock"),
     RESET("/reset_profile"),
-    HELP("/help");
+    HELP("/help"),
+    WATCHED("/watched");
 
     public final String cmd;
 

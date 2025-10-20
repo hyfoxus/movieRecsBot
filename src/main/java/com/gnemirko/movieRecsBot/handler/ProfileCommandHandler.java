@@ -96,11 +96,11 @@ public class ProfileCommandHandler {
         return """
                 *Команды*:
                 /profile — показать профиль
-                /like_genre фэнтези, комедия
-                /like_actor Том Хиддлстон
-                /like_director Кристофер Нолан
-                /block хоррор, детское
-                /unblock хоррор
+                /like_genre — фэнтези, комедия
+                /like_actor — Том Хиддлстон
+                /like_director — Кристофер Нолан
+                /block — хоррор, детское
+                /unblock — хоррор
                 /watched — сохранить мнение о просмотренном фильме
                 /reset_profile — очистить профиль
                 """;

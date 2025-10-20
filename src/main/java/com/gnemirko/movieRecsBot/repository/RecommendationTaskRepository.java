@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RecommendationTaskRepository extends JpaRepository<RecommendationTask, Long> {
-    List<RecommendationTask> findTop20ByChatIdOrderByCreatedAtDesc(Long chatId);
     boolean existsByDisplayId(String displayId);
     Optional<RecommendationTask> findByDisplayId(String displayId);
     List<RecommendationTask> findByChatIdAndStatusInOrderByCreatedAtAsc(Long chatId, Collection<RecommendationTask.Status> statuses);

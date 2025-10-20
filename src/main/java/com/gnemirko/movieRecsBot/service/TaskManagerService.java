@@ -133,7 +133,7 @@ public class TaskManagerService {
             sendMessage(SendMessage.builder()
                     .chatId(String.valueOf(t.getChatId()))
                     .text(text)
-                    .parseMode("MarkdownV2")
+                    .parseMode("HTML")
                     .build());
 
         } catch (Exception e) {
@@ -157,12 +157,12 @@ public class TaskManagerService {
         try {
             sender.execute(message);
         } catch (TelegramApiException e) {
-            log.error("Failed to send Telegram message: {}", e.getMessage(), e);
-            if ("MarkdownV2".equalsIgnoreCase(message.getParseMode())) {
+            log.error("Failed to send Telegram message: {} | payload='{}'", e.getMessage(), message.getText(), e);
+            if ("HTML".equalsIgnoreCase(message.getParseMode())) {
                 try {
                     SendMessage fallback = SendMessage.builder()
                             .chatId(message.getChatId())
-                            .text(message.getText())
+                            .text(htmlToPlain(message.getText()))
                             .disableWebPagePreview(message.getDisableWebPagePreview())
                             .replyMarkup(message.getReplyMarkup())
                             .build();
@@ -182,5 +182,19 @@ public class TaskManagerService {
         } catch (Exception e) {
             log.warn("Failed to remove task {} from queue: {}", task.getId(), e.getMessage());
         }
+    }
+
+    private String htmlToPlain(String html) {
+        if (html == null || html.isEmpty()) return "";
+        String plain = html
+                .replace("<br/>", "\n")
+                .replace("<br>", "\n");
+        plain = plain.replaceAll("<[^>]+>", "");
+        return plain
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
     }
 }

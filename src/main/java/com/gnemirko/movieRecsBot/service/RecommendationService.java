@@ -48,22 +48,22 @@ public class RecommendationService {
         boolean force = dialogPolicy.recommendNow(chatId, userText);
         String out;
         if (force) {
-            out = recommendMarkdown(history, userText, profileSummary, profile);
+            out = renderRecommendations(history, userText, profileSummary, profile);
             dialogPolicy.reset(chatId);
             out = appendOpinionReminder(out);
         } else {
             String next = askOneQuestionOrRecommend(history, userText, profileSummary).trim();
             if ("__RECOMMEND__".equalsIgnoreCase(next)) {
-                out = recommendMarkdown(history, userText, profileSummary, profile);
+                out = renderRecommendations(history, userText, profileSummary, profile);
                 dialogPolicy.reset(chatId);
                 out = appendOpinionReminder(out);
             } else {
                 dialogPolicy.countClarifying(chatId);
-                out = escapeMdV2(next);
+                out = escapeHtml(next);
             }
         }
         userContextService.append(chatId, "User: " + userText);
-        userContextService.append(chatId, "Bot: " + out);
+        userContextService.append(chatId, "Bot: " + htmlToPlain(out));
         return out;
     }
 
@@ -84,7 +84,7 @@ public class RecommendationService {
                 .content();
     }
 
-    private String recommendMarkdown(String history, String userText, String profileSummary, UserProfile profile) {
+    private String renderRecommendations(String history, String userText, String profileSummary, UserProfile profile) {
         String json = chatClient
                 .prompt()
                 .system(SYSTEM + """
@@ -114,20 +114,23 @@ public class RecommendationService {
 
         Parsed parsed = parseAndFilter(json, profile, userText);
         if (parsed.movies.isEmpty()) {
-            return escapeMdV2("Не нашёл подходящих вариантов. Напишите 1–2 любимых фильма — подберу похожие.");
+            return escapeHtml("Не нашёл подходящих вариантов. Напишите 1–2 любимых фильма — подберу похожие.");
         }
         StringBuilder sb = new StringBuilder();
-        if (!isBlank(parsed.intro)) sb.append(escapeMdV2(parsed.intro)).append("\n\n");
-        int i = 1;
-        for (Movie m : parsed.movies) {
-            String title = escapeMdV2(nvl(m.title));
-            String reason = escapeMdV2(nvl(m.reason));
-            if (m.year != null) {
-                sb.append(i).append(". **").append(title).append(" (").append(m.year).append(")** — ").append(reason).append("\n");
-            } else {
-                sb.append(i).append(". **").append(title).append("** — ").append(reason).append("\n");
+        if (!isBlank(parsed.intro)) {
+            sb.append("<b>").append(escapeHtml(parsed.intro)).append("</b>\n\n");
+        }
+        int idx = 1;
+        for (Movie movie : parsed.movies) {
+            if (idx > 5) break;
+
+            String rawTitle = stripMarkdown(nvl(movie.title).trim());
+            sb.append(idx).append(". <b>").append(escapeHtml(rawTitle));
+            if (movie.year != null && !containsYear(rawTitle, movie.year)) {
+                sb.append(" (").append(movie.year).append(")");
             }
-            if (++i > 5) break;
+            sb.append("</b> — ").append(escapeHtml(nvl(movie.reason))).append("\n\n");
+            idx++;
         }
         return sb.toString().trim();
     }
@@ -230,6 +233,29 @@ public class RecommendationService {
         return s == null ? "" : s;
     }
 
+    private static boolean containsYear(String title, Integer year) {
+        if (title == null || year == null) return false;
+        String normalized = title.replaceAll("[^0-9]", "");
+        return normalized.contains(String.valueOf(year));
+    }
+
+    private static String stripMarkdown(String value) {
+        if (value == null || value.isEmpty()) return "";
+        return value.replaceAll("\\*+", "");
+    }
+
+    private static String htmlToPlain(String html) {
+        if (html == null || html.isEmpty()) return "";
+        String plain = html.replace("<br/>", "\n").replace("<br>", "\n");
+        plain = plain.replaceAll("<[^>]+>", "");
+        return plain
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
+    }
+
     private String shortOpinion(MovieOpinion op) {
         if (op == null) return "";
         String title = nvl(op.getTitle()).trim();
@@ -241,18 +267,23 @@ public class RecommendationService {
 
     private String appendOpinionReminder(String text) {
         if (text == null || text.isBlank()) return text;
-        String reminder = escapeMdV2("Когда посмотришь фильм, напиши /watched и поделись мнением — я буду точнее.");
+        String reminder = "<i>" + escapeHtml("Когда посмотришь фильм, напиши /watched и поделись мнением — я буду точнее.") + "</i>";
         return text + "\n\n" + reminder;
     }
 
-    private static final String MDV2_SPECIAL = "_*[]()~`>#+-=|{}.!";
-
-    private static String escapeMdV2(String s) {
-        if (s == null || s.isBlank()) return "";
+    private static String escapeHtml(String s) {
+        if (s == null || s.isEmpty()) return "";
         StringBuilder out = new StringBuilder(s.length() + 16);
         for (char c : s.toCharArray()) {
-            if (MDV2_SPECIAL.indexOf(c) >= 0) out.append('\\');
-            out.append(c);
+            switch (c) {
+                case '&' -> out.append("&amp;");
+                case '<' -> out.append("&lt;");
+                case '>' -> out.append("&gt;");
+                case '"' -> out.append("&quot;");
+                case '\'' -> out.append("&#39;");
+                case '\n' -> out.append("<br/>");
+                default -> out.append(c);
+            }
         }
         return out.toString();
     }

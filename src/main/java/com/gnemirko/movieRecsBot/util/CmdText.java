@@ -5,25 +5,38 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public final class CmdText {
-    private static final String MDV2 = "_*[]()~`>#+-=|{}.!";
+
+    private static final String MDV2_SPECIAL = "_*[]()~`>#+-=|{}.!";
+
+    private CmdText() {
+    }
 
     public static List<String> parseArgs(String text) {
-        if (text == null) return List.of();
-        int sp = text.indexOf(' ');
-        String payload = sp < 0 ? text : text.substring(sp + 1);
-        return Arrays.stream(payload.split("[,;]"))
+        if (text == null) {
+            return List.of();
+        }
+        String payload = text;
+        int sp = payload.indexOf(' ');
+        if (sp >= 0) {
+            payload = payload.substring(sp + 1);
+        }
+        return Arrays.stream(payload.split("[,;\\n]"))
                 .map(String::trim)
-                .filter(s -> !s.isEmpty())
+                .filter(val -> !val.isEmpty())
                 .collect(Collectors.toList());
     }
 
-    public static String esc(String s) {
-        if (s == null || s.isBlank()) return "";
-        StringBuilder out = new StringBuilder(s.length() + 8);
-        for (char c : s.toCharArray()) {
-            if (MDV2.indexOf(c) >= 0) out.append('\\');
-            out.append(c);
+    public static String esc(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
         }
-        return out.toString();
+        StringBuilder sb = new StringBuilder(value.length() + 16);
+        for (char c : value.toCharArray()) {
+            if (MDV2_SPECIAL.indexOf(c) >= 0) {
+                sb.append('\\');
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 }

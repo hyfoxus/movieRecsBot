@@ -18,7 +18,7 @@ public class BootstrapController {
     private final String expectedToken;
 
     public BootstrapController(BootstrapService bootstrapService,
-                               @Value("${app.admin.bootstrapToken:}") String expectedToken) {
+                               @Value("${app.admin.bootstrap-token:}") String expectedToken) {
         this.bootstrapService = bootstrapService;
         this.expectedToken = expectedToken;
     }

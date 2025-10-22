@@ -37,6 +37,6 @@ app:
     embeddingMaxRetries: 3
     embeddingRetryDelay: PT5S
   admin:
-    bootstrapToken: change-me
+    bootstrap-token: change-me
   recommend:
     efSearch: 200

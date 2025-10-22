@@ -43,7 +43,7 @@ services:
       APP_OLLAMA_BASE_URL: http://ollama:11434
       APP_ADMIN_BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN}
     ports:
-      - "8080:8080"
+      - "${IMDBVEC_HTTP_PORT:-8088}:8088"
     volumes:
       - imdbdata:/data/imdb
 

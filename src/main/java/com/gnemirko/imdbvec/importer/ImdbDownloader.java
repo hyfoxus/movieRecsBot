@@ -1,0 +1,88 @@
+package com.gnemirko.imdbvec.importer;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import reactor.core.publisher.Flux;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
+
+@Component
+public class ImdbDownloader {
+
+    private final WebClient web;
+    private final String baseUrl;
+    private final Path dataDir;
+
+    public ImdbDownloader(WebClient plainWebClient,
+                          @Value("${app.imdb.baseUrl}") String baseUrl,
+                          @Value("${app.imdb.dataDir}") String dataDir) throws IOException {
+        this.web = plainWebClient;
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length()-1) : baseUrl;
+        this.dataDir = Paths.get(dataDir);
+        Files.createDirectories(this.dataDir);
+    }
+
+    public DownloadResult downloadIfChanged(String fileName, String etagPrev, String lmPrev) throws IOException {
+        String uri = baseUrl + "/" + fileName;
+
+        ClientResponse headResponse = web.head()
+                .uri(uri)
+                .exchangeToMono(mono -> mono)
+                .block();
+
+        if (headResponse == null) {
+            throw new IOException("Failed to fetch headers for " + uri);
+        }
+
+        HttpStatusCode headStatus = headResponse.statusCode();
+        if (!headStatus.is2xxSuccessful()) {
+            throw new IOException("Failed to fetch headers for " + uri + " status=" + headStatus.value());
+        }
+
+        String etag = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.ETAG);
+        String lastModified = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_MODIFIED);
+
+        Path out = dataDir.resolve(fileName);
+        boolean unchanged = Files.exists(out)
+                && etag != null && lastModified != null
+                && etag.equals(etagPrev)
+                && lastModified.equals(lmPrev);
+
+        if (unchanged) {
+            return new DownloadResult(out, etag, lastModified, true);
+        }
+
+        ClientResponse getResponse = web.get()
+                .uri(uri)
+                .exchangeToMono(mono -> mono)
+                .block();
+
+        if (getResponse == null) {
+            throw new IOException("Failed to download " + uri);
+        }
+
+        if (!getResponse.statusCode().is2xxSuccessful()) {
+            throw new IOException("Failed to download " + uri + " status=" + getResponse.statusCode().value());
+        }
+
+        Flux<DataBuffer> body = getResponse.bodyToFlux(DataBuffer.class);
+        DataBufferUtils.write(body, out, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+                .block(Duration.ofHours(1));
+
+        return new DownloadResult(out, etag, lastModified, false);
+    }
+
+    public record DownloadResult(Path path, String etag, String lastModified, boolean unchanged) {
+    }
+}

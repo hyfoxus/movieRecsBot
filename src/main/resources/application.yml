@@ -1,0 +1,42 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/imdb
+    username: imdb
+    password: imdb
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.batch_size: 500
+      hibernate.order_inserts: true
+      hibernate.order_updates: true
+      hibernate.generate_statistics: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+app:
+  imdb:
+    baseUrl: https://datasets.imdbws.com
+    files:
+      - title.basics.tsv.gz
+      - title.ratings.tsv.gz
+      - title.akas.tsv.gz
+      - title.principals.tsv.gz
+      - title.crew.tsv.gz
+      - title.episode.tsv.gz
+      - name.basics.tsv.gz
+    dataDir: ./data/imdb
+  ollama:
+    baseUrl: http://localhost:11434
+    embeddingModel: nomic-embed-text
+    embeddingDims: 768
+    embeddingMaxRetries: 3
+    embeddingRetryDelay: PT5S
+  admin:
+    bootstrapToken: change-me
+  recommend:
+    efSearch: 200

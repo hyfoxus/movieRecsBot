@@ -23,7 +23,7 @@ public class ImportService {
     public ImportService(ImdbDownloader downloader,
                          ImdbCopyLoader loader,
                          JdbcTemplate jdbc,
-                         @Value("${app.imdb.files}") List<String> files) {
+                         @Value("${app.imdb.files:title.basics.tsv.gz,title.ratings.tsv.gz,title.akas.tsv.gz,title.principals.tsv.gz,title.crew.tsv.gz,title.episode.tsv.gz,name.basics.tsv.gz}") List<String> files) {
         this.downloader = downloader;
         this.loader = loader;
         this.jdbc = jdbc;

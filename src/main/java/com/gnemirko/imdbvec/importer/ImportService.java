@@ -78,7 +78,12 @@ public class ImportService {
                     } catch (Exception ignored) {}
                     download = downloader.downloadFresh(f);
                     path = download.path();
-                    loaded = loadFile(f, path);
+                    try {
+                        loaded = loadFile(f, path);
+                    } catch (Exception retryEx) {
+                        retryEx.addSuppressed(ex);
+                        throw retryEx;
+                    }
                 } else {
                     throw ex;
                 }

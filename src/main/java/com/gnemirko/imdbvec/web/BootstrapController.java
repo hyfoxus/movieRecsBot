@@ -24,7 +24,7 @@ public class BootstrapController {
     }
 
     @PostMapping
-    public ResponseEntity<String> triggerBootstrap(@RequestParam(defaultValue = "true") boolean rebuildIndex,
+    public ResponseEntity<String> triggerBootstrap(@RequestParam(name = "rebuildIndex", defaultValue = "true") boolean rebuildIndex,
                                                    @RequestHeader(value = "X-Bootstrap-Token", required = false) String token) {
         if (expectedToken != null && !expectedToken.isBlank()) {
             if (token == null || !expectedToken.equals(token)) {

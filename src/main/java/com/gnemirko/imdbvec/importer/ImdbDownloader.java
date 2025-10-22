@@ -46,6 +46,7 @@ public class ImdbDownloader {
     private DownloadResult download(String fileName, String etagPrev, String lmPrev, boolean force) throws IOException {
         String uri = baseUrl + "/" + fileName;
 
+        Path out = dataDir.resolve(fileName);
         String etag = null;
         String lastModified = null;
 
@@ -70,7 +71,6 @@ public class ImdbDownloader {
             etag = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.ETAG);
             lastModified = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_MODIFIED);
 
-            Path out = dataDir.resolve(fileName);
             boolean unchanged = Files.exists(out)
                     && etag != null && lastModified != null
                     && etag.equals(etagPrev)
@@ -98,6 +98,14 @@ public class ImdbDownloader {
         }
 
         Flux<DataBuffer> body = getResponse.bodyToFlux(DataBuffer.class);
+
+        if (etag == null) {
+            etag = getResponse.headers().asHttpHeaders().getFirst(HttpHeaders.ETAG);
+        }
+        if (lastModified == null) {
+            lastModified = getResponse.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_MODIFIED);
+        }
+
         DataBufferUtils.write(body, out, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
                 .block(Duration.ofHours(1));
 

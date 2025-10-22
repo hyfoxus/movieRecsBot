@@ -36,36 +36,49 @@ public class ImdbDownloader {
     }
 
     public DownloadResult downloadIfChanged(String fileName, String etagPrev, String lmPrev) throws IOException {
+        return download(fileName, etagPrev, lmPrev, false);
+    }
+
+    public DownloadResult downloadFresh(String fileName) throws IOException {
+        return download(fileName, null, null, true);
+    }
+
+    private DownloadResult download(String fileName, String etagPrev, String lmPrev, boolean force) throws IOException {
         String uri = baseUrl + "/" + fileName;
 
-        ClientResponse headResponse = web.head()
-                .uri(uri)
-                .exchangeToMono(Mono::just)
-                .block();
+        String etag = null;
+        String lastModified = null;
 
-        if (headResponse == null) {
-            throw new IOException("Failed to fetch headers for " + uri);
-        }
+        if (!force) {
+            ClientResponse headResponse = web.head()
+                    .uri(uri)
+                    .exchangeToMono(Mono::just)
+                    .block();
 
-        HttpStatusCode headStatus = headResponse.statusCode();
-        if (!headStatus.is2xxSuccessful()) {
-            try {
-                headResponse.releaseBody().block(Duration.ofSeconds(30));
-            } catch (Exception ignored) {}
-            throw new IOException("Failed to fetch headers for " + uri + " status=" + headStatus.value());
-        }
+            if (headResponse == null) {
+                throw new IOException("Failed to fetch headers for " + uri);
+            }
 
-        String etag = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.ETAG);
-        String lastModified = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_MODIFIED);
+            HttpStatusCode headStatus = headResponse.statusCode();
+            if (!headStatus.is2xxSuccessful()) {
+                try {
+                    headResponse.releaseBody().block(Duration.ofSeconds(30));
+                } catch (Exception ignored) {}
+                throw new IOException("Failed to fetch headers for " + uri + " status=" + headStatus.value());
+            }
 
-        Path out = dataDir.resolve(fileName);
-        boolean unchanged = Files.exists(out)
-                && etag != null && lastModified != null
-                && etag.equals(etagPrev)
-                && lastModified.equals(lmPrev);
+            etag = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.ETAG);
+            lastModified = headResponse.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_MODIFIED);
 
-        if (unchanged) {
-            return new DownloadResult(out, etag, lastModified, true);
+            Path out = dataDir.resolve(fileName);
+            boolean unchanged = Files.exists(out)
+                    && etag != null && lastModified != null
+                    && etag.equals(etagPrev)
+                    && lastModified.equals(lmPrev);
+
+            if (unchanged) {
+                return new DownloadResult(out, etag, lastModified, true);
+            }
         }
 
         ClientResponse getResponse = web.get()

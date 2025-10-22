@@ -1,19 +1,26 @@
 package com.gnemirko.imdbvec.importer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.EOFException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.ZipException;
 
 @Service
 public class ImportService {
+
+    private static final Logger log = LoggerFactory.getLogger(ImportService.class);
 
     private final ImdbDownloader downloader;
     private final ImdbCopyLoader loader;
@@ -60,16 +67,22 @@ public class ImportService {
             ImdbDownloader.DownloadResult download = downloader.downloadIfChanged(f, prevEtag, prevLm);
             Path path = download.path();
 
-            long loaded = switch (f) {
-                case "title.basics.tsv.gz"     -> loader.loadTitleBasics(path);
-                case "title.ratings.tsv.gz"    -> loader.loadTitleRatings(path);
-                case "title.akas.tsv.gz"       -> loader.loadTitleAkas(path);
-                case "title.principals.tsv.gz" -> loader.loadTitlePrincipals(path);
-                case "title.crew.tsv.gz"       -> loader.loadTitleCrew(path);
-                case "title.episode.tsv.gz"    -> loader.loadTitleEpisode(path);
-                case "name.basics.tsv.gz"      -> loader.loadNameBasics(path);
-                default -> 0L;
-            };
+            long loaded;
+            try {
+                loaded = loadFile(f, path);
+            } catch (Exception ex) {
+                if (isRecoverableDownloadError(ex)) {
+                    log.warn("Detected truncated or corrupted archive {}. Re-downloading fresh copy.", f, ex);
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (Exception ignored) {}
+                    download = downloader.downloadFresh(f);
+                    path = download.path();
+                    loaded = loadFile(f, path);
+                } else {
+                    throw ex;
+                }
+            }
 
             // We don't have ETag/L-M here because WebClient .toEntity() gave us only once; in practice,
             // you might read headers in downloader and return them. For demo, mark imported rows.
@@ -91,5 +104,29 @@ public class ImportService {
 
     private void truncateTables() {
         jdbc.execute("TRUNCATE TABLE title_akas, title_principals, title_crew, title_episode, person, movie RESTART IDENTITY CASCADE");
+    }
+
+    private long loadFile(String fileName, Path path) throws Exception {
+        return switch (fileName) {
+            case "title.basics.tsv.gz"     -> loader.loadTitleBasics(path);
+            case "title.ratings.tsv.gz"    -> loader.loadTitleRatings(path);
+            case "title.akas.tsv.gz"       -> loader.loadTitleAkas(path);
+            case "title.principals.tsv.gz" -> loader.loadTitlePrincipals(path);
+            case "title.crew.tsv.gz"       -> loader.loadTitleCrew(path);
+            case "title.episode.tsv.gz"    -> loader.loadTitleEpisode(path);
+            case "name.basics.tsv.gz"      -> loader.loadNameBasics(path);
+            default -> 0L;
+        };
+    }
+
+    private boolean isRecoverableDownloadError(Exception ex) {
+        Throwable t = ex;
+        while (t != null) {
+            if (t instanceof EOFException || t instanceof ZipException) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 }

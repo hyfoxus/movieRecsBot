@@ -9,6 +9,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,7 +39,7 @@ public class ImdbDownloader {
 
         ClientResponse headResponse = web.head()
                 .uri(uri)
-                .exchangeToMono(mono -> mono)
+                .exchangeToMono(Mono::just)
                 .block();
 
         if (headResponse == null) {
@@ -47,6 +48,9 @@ public class ImdbDownloader {
 
         HttpStatusCode headStatus = headResponse.statusCode();
         if (!headStatus.is2xxSuccessful()) {
+            try {
+                headResponse.releaseBody().block(Duration.ofSeconds(30));
+            } catch (Exception ignored) {}
             throw new IOException("Failed to fetch headers for " + uri + " status=" + headStatus.value());
         }
 
@@ -65,7 +69,7 @@ public class ImdbDownloader {
 
         ClientResponse getResponse = web.get()
                 .uri(uri)
-                .exchangeToMono(mono -> mono)
+                .exchangeToMono(Mono::just)
                 .block();
 
         if (getResponse == null) {
@@ -73,6 +77,9 @@ public class ImdbDownloader {
         }
 
         if (!getResponse.statusCode().is2xxSuccessful()) {
+            try {
+                getResponse.releaseBody().block(Duration.ofSeconds(30));
+            } catch (Exception ignored) {}
             throw new IOException("Failed to download " + uri + " status=" + getResponse.statusCode().value());
         }
 
@@ -82,6 +89,7 @@ public class ImdbDownloader {
 
         return new DownloadResult(out, etag, lastModified, false);
     }
+
 
     public record DownloadResult(Path path, String etag, String lastModified, boolean unchanged) {
     }

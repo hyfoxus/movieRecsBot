@@ -1,6 +1,7 @@
 package com.gnemirko.imdbvec.importer;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -25,7 +26,7 @@ public class ImdbDownloader {
     private final String baseUrl;
     private final Path dataDir;
 
-    public ImdbDownloader(WebClient plainWebClient,
+    public ImdbDownloader(@Qualifier("plainWebClient") WebClient plainWebClient,
                           @Value("${app.imdb.baseUrl}") String baseUrl,
                           @Value("${app.imdb.dataDir}") String dataDir) throws IOException {
         this.web = plainWebClient;

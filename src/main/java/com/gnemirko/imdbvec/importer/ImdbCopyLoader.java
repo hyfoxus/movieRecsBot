@@ -54,7 +54,7 @@ public class ImdbCopyLoader {
                     COPY tmp_title_basics
                       (tconst, title_type, primary_title, original_title, is_adult,
                        start_year, end_year, runtime_minutes, genres)
-                    FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\\\N')
+                    FROM STDIN WITH (FORMAT text)
                     """, gz);
             }
 

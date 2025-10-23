@@ -87,6 +87,15 @@ public class ImdbCopyLoader {
                     ELSE string_to_array(genres, ',')::text[]
                   END
                 FROM tmp_title_basics
+                ON CONFLICT (tconst) DO UPDATE
+                  SET title_type      = EXCLUDED.title_type,
+                      primary_title   = EXCLUDED.primary_title,
+                      original_title  = EXCLUDED.original_title,
+                      is_adult        = EXCLUDED.is_adult,
+                      start_year      = EXCLUDED.start_year,
+                      end_year        = EXCLUDED.end_year,
+                      runtime_minutes = EXCLUDED.runtime_minutes,
+                      genres          = EXCLUDED.genres
                 """);
 
             st.execute("DROP TABLE IF EXISTS tmp_title_basics");

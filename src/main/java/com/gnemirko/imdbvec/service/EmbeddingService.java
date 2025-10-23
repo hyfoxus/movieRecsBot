@@ -2,7 +2,6 @@ package com.gnemirko.imdbvec.service;
 
 import com.gnemirko.imdbvec.model.Movie;
 import com.gnemirko.imdbvec.repo.MovieRepository;
-import com.pgvector.PGvector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -127,7 +126,7 @@ public class EmbeddingService {
             for (Movie movie : batch) {
                 String text = buildEmbeddingText(movie);
                 float[] vector = embed(text);
-                movie.setEmbedding(new PGvector(vector));
+                movie.setEmbedding(vector);
                 movie.setEmbeddingModel(model);
                 movie.setEmbeddingUpdatedAt(OffsetDateTime.now());
                 toSave.add(movie);

@@ -1,6 +1,5 @@
 package com.gnemirko.imdbvec.model;
 
-import com.pgvector.PGvector;
 import jakarta.persistence.Convert;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -40,7 +39,7 @@ public class Movie {
     private String plot;
 
     @Convert(converter = PGVectorConverter.class)
-    private PGvector embedding;
+    private float[] embedding;
 
     private String embeddingModel;
     private OffsetDateTime embeddingUpdatedAt;

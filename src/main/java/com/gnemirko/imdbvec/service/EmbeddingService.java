@@ -39,6 +39,7 @@ public class EmbeddingService {
 
     private final WebClient web;
     private final String model;
+    private final String baseUrl;
     private final MovieRepository movies;
     private final int maxRetries;
     private final Duration retryDelay;
@@ -50,6 +51,7 @@ public class EmbeddingService {
             @Value("${app.ollama.embeddingRetryDelay:PT5S}") Duration retryDelay,
             MovieRepository movies
     ) {
+        this.baseUrl = baseUrl;
         this.web = WebClient.builder()
                 .baseUrl(baseUrl)
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(32 * 1024 * 1024))
@@ -101,6 +103,8 @@ public class EmbeddingService {
             float[] out = new float[v.size()];
             for (int i = 0; i < v.size(); i++) out[i] = v.get(i).floatValue();
             return out;
+        } catch (WebClientResponseException.NotFound nf) {
+            throw new IllegalStateException("Ollama returned 404 for embeddings. Ensure the embedding model '" + model + "' is pulled and that " + baseUrl + "/api/embeddings is reachable.", nf);
         } catch (RuntimeException ex) {
             throw new IllegalStateException("Failed to fetch embedding after " + attempts + " attempts", ex);
         }

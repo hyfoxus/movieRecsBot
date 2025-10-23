@@ -3,6 +3,7 @@ package com.gnemirko.imdbvec.service;
 import com.gnemirko.imdbvec.importer.ImportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -16,13 +17,16 @@ public class BootstrapService {
     private final ImportService importer;
     private final EmbeddingService embeddings;
     private final VectorIndexService indexer;
+    private final boolean skipEmbeddingsOnError;
 
     public BootstrapService(ImportService importer,
                             EmbeddingService embeddings,
-                            VectorIndexService indexer) {
+                            VectorIndexService indexer,
+                            @Value("${app.bootstrap.skipEmbeddingsOnError:true}") boolean skipEmbeddingsOnError) {
         this.importer = importer;
         this.embeddings = embeddings;
         this.indexer = indexer;
+        this.skipEmbeddingsOnError = skipEmbeddingsOnError;
     }
 
     /**
@@ -34,7 +38,15 @@ public class BootstrapService {
         try {
             log.info("Bootstrap job started (rebuildIndex={})", rebuildIndex);
             importer.runFullImport();
-            embeddings.backfillEmbeddings();
+            try {
+                embeddings.backfillEmbeddings();
+            } catch (Exception ex) {
+                if (skipEmbeddingsOnError) {
+                    log.error("Embedding backfill failed; continuing without embeddings (set app.bootstrap.skipEmbeddingsOnError=false to fail).", ex);
+                } else {
+                    throw ex;
+                }
+            }
             if (rebuildIndex) {
                 indexer.ensureHnswIndex();
             }

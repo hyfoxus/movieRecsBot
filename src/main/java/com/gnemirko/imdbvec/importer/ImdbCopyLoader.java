@@ -75,7 +75,13 @@ public class ImdbCopyLoader {
                   END,
                   NULLIF(start_year, '\\N')::smallint,
                   NULLIF(end_year, '\\N')::smallint,
-                  NULLIF(runtime_minutes, '\\N')::smallint,
+                  CASE
+                    WHEN runtime_minutes IS NULL OR runtime_minutes = '\\N' THEN NULL
+                    WHEN runtime_minutes !~ '^-?\\d+$' THEN NULL
+                    WHEN (runtime_minutes)::integer BETWEEN -32768 AND 32767
+                      THEN runtime_minutes::smallint
+                    ELSE NULL
+                  END,
                   CASE
                     WHEN genres IS NULL OR genres = '\\N' THEN NULL
                     ELSE string_to_array(genres, ',')::text[]

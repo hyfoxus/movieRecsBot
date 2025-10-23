@@ -31,7 +31,7 @@ app:
       - name.basics.tsv.gz
     dataDir: ./data/imdb
   ollama:
-    baseUrl: http://localhost:11434
+    baseUrl: ${APP_OLLAMA_BASE_URL:http://${APP_OLLAMA_HOST:ollama}:${APP_OLLAMA_PORT:11434}}
     embeddingModel: nomic-embed-text
     embeddingDims: 768
     timeouts:

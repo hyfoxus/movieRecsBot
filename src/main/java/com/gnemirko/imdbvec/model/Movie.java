@@ -1,6 +1,5 @@
 package com.gnemirko.imdbvec.model;
 
-import jakarta.persistence.Convert;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -38,7 +37,7 @@ public class Movie {
     @Column(columnDefinition = "text")
     private String plot;
 
-    @Convert(converter = PGVectorConverter.class)
+    @Transient
     private float[] embedding;
 
     private String embeddingModel;

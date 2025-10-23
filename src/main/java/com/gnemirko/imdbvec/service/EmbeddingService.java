@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -40,6 +42,7 @@ public class EmbeddingService {
     private final String model;
     private final String baseUrl;
     private final MovieRepository movies;
+    private final JdbcTemplate jdbc;
     private final int maxRetries;
     private final Duration retryDelay;
 
@@ -48,7 +51,8 @@ public class EmbeddingService {
             @Value("${app.ollama.embeddingModel:nomic-embed-text}") String model,
             @Value("${app.ollama.embeddingMaxRetries:3}") int maxRetries,
             @Value("${app.ollama.embeddingRetryDelay:PT5S}") Duration retryDelay,
-            MovieRepository movies
+            MovieRepository movies,
+            JdbcTemplate jdbc
     ) {
         this.baseUrl = baseUrl;
         this.web = WebClient.builder()
@@ -57,6 +61,7 @@ public class EmbeddingService {
                 .build();
         this.model = model;
         this.movies = movies;
+        this.jdbc = jdbc;
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelay = retryDelay.isNegative() ? Duration.ZERO : retryDelay;
     }
@@ -115,7 +120,7 @@ public class EmbeddingService {
      */
     public void backfillEmbeddings() {
         while (true) {
-            List<Movie> batch = movies.findTop500ByEmbeddingIsNullOrderByIdAsc();
+            List<Movie> batch = movies.findTop500ByEmbeddingModelIsNullOrderByIdAsc();
             if (batch.isEmpty()) {
                 log.info("Embedding backfill complete; all records processed.");
                 return;
@@ -151,8 +156,34 @@ public class EmbeddingService {
 
     @Transactional
     void persistBatch(List<Movie> batch) {
-        movies.saveAll(batch);
-        movies.flush();
+        jdbc.batchUpdate(
+                "UPDATE movie SET embedding = CAST(? AS vector), embedding_model = ?, embedding_updated_at = ? WHERE id = ?",
+                batch,
+                100,
+                (ps, movie) -> {
+                    String literal = toVectorLiteral(movie.getEmbedding());
+                    if (literal == null) {
+                        ps.setNull(1, java.sql.Types.OTHER);
+                    } else {
+                        ps.setString(1, literal);
+                    }
+                    ps.setString(2, movie.getEmbeddingModel());
+                    ps.setObject(3, movie.getEmbeddingUpdatedAt());
+                    ps.setLong(4, movie.getId());
+                }
+        );
+    }
+
+    private String toVectorLiteral(float[] embedding) {
+        if (embedding == null) return null;
+        StringBuilder sb = new StringBuilder(embedding.length * 8);
+        sb.append('[');
+        for (int i = 0; i < embedding.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(embedding[i]);
+        }
+        sb.append(']');
+        return sb.toString();
     }
 
     private List<String> buildTags(Movie movie) {

@@ -9,5 +9,5 @@ import java.util.Optional;
 public interface MovieRepository extends JpaRepository<Movie, Long> {
     Optional<Movie> findByTconst(String tconst);
 
-    List<Movie> findTop500ByEmbeddingIsNullOrderByIdAsc();
+    List<Movie> findTop500ByEmbeddingModelIsNullOrderByIdAsc();
 }

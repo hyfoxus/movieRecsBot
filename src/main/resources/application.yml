@@ -34,6 +34,9 @@ app:
     baseUrl: http://localhost:11434
     embeddingModel: nomic-embed-text
     embeddingDims: 768
+    timeouts:
+      connectMillis: 5000
+      readMillis: 60000
     embeddingMaxRetries: 3
     embeddingRetryDelay: PT5S
   admin:

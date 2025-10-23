@@ -24,7 +24,6 @@ public class ImdbDownloader {
     private final WebClient http;
 
     public ImdbDownloader(WebClient.Builder builder) {
-        // Dedicated client with sane timeouts
         HttpClient netty = HttpClient.create()
                 .responseTimeout(Duration.ofMinutes(5))
                 .compress(true);

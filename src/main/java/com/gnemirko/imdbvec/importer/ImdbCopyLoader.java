@@ -2,7 +2,6 @@ package com.gnemirko.imdbvec.importer;
 
 import org.postgresql.PGConnection;
 import org.postgresql.copy.CopyManager;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.stereotype.Component;
 
@@ -19,11 +18,9 @@ import java.util.zip.GZIPInputStream;
 public class ImdbCopyLoader {
 
     private final DataSource dataSource;
-    private final JdbcTemplate jdbc;
 
-    public ImdbCopyLoader(DataSource dataSource, JdbcTemplate jdbc) {
+    public ImdbCopyLoader(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.jdbc = jdbc;
     }
 
     public long loadTitleBasics(Path gzFile) throws Exception {
@@ -37,10 +34,10 @@ public class ImdbCopyLoader {
                   title_type       text,
                   primary_title    text,
                   original_title   text,
-                  is_adult         boolean,
-                  start_year       smallint,
-                  end_year         smallint,
-                  runtime_minutes  smallint,
+                  is_adult         text,
+                  start_year       text,
+                  end_year         text,
+                  runtime_minutes  text,
                   genres           text
                 ) ON COMMIT DROP
                 """);
@@ -66,10 +63,21 @@ public class ImdbCopyLoader {
                   (tconst, title_type, primary_title, original_title, is_adult,
                    start_year, end_year, runtime_minutes, genres)
                 SELECT
-                  tconst, title_type, primary_title, original_title, is_adult,
-                  start_year, end_year, runtime_minutes,
+                  tconst,
+                  NULLIF(title_type, '\\N'),
+                  NULLIF(primary_title, '\\N'),
+                  NULLIF(original_title, '\\N'),
                   CASE
-                    WHEN genres IS NULL THEN NULL
+                    WHEN is_adult IS NULL OR is_adult = '\\N' THEN NULL
+                    WHEN is_adult IN ('1','t','true','TRUE') THEN TRUE
+                    WHEN is_adult IN ('0','f','false','FALSE') THEN FALSE
+                    ELSE NULL
+                  END,
+                  NULLIF(start_year, '\\N')::smallint,
+                  NULLIF(end_year, '\\N')::smallint,
+                  NULLIF(runtime_minutes, '\\N')::smallint,
+                  CASE
+                    WHEN genres IS NULL OR genres = '\\N' THEN NULL
                     ELSE string_to_array(genres, ',')::text[]
                   END
                 FROM tmp_title_basics

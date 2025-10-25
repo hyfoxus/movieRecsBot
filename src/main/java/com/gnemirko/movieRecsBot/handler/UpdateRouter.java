@@ -228,6 +228,7 @@ public class UpdateRouter {
             String displayId = task.getDisplayId();
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
+                    // uncomment this if you want to see the text about query in chat
 //                    .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\n" +
 //                            "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
 //                    .parseMode("MarkdownV2")

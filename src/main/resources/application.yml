@@ -30,6 +30,7 @@ app:
       - title.episode.tsv.gz
       - name.basics.tsv.gz
     dataDir: ./data/imdb
+    maxTitles: 10000
   ollama:
     baseUrl: ${APP_OLLAMA_BASE_URL:http://${APP_OLLAMA_HOST:ollama}:${APP_OLLAMA_PORT:11434}}
     embeddingModel: nomic-embed-text

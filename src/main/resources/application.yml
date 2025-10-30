@@ -24,11 +24,6 @@ app:
     files:
       - title.basics.tsv.gz
       - title.ratings.tsv.gz
-      - title.akas.tsv.gz
-      - title.principals.tsv.gz
-      - title.crew.tsv.gz
-      - title.episode.tsv.gz
-      - name.basics.tsv.gz
     dataDir: ./data/imdb
     maxTitles: 10000
   ollama:

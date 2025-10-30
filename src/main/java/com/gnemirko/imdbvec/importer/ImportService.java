@@ -20,12 +20,6 @@ public class ImportService {
 
     private static final String TITLE_BASICS_FILE = "title.basics.tsv.gz";
     private static final String TITLE_RATINGS_FILE = "title.ratings.tsv.gz";
-    private static final String TITLE_AKAS_FILE = "title.akas.tsv.gz";
-    private static final String TITLE_PRINCIPALS_FILE = "title.principals.tsv.gz";
-    private static final String TITLE_CREW_FILE = "title.crew.tsv.gz";
-    private static final String TITLE_EPISODE_FILE = "title.episode.tsv.gz";
-    private static final String NAME_BASICS_FILE = "name.basics.tsv.gz";
-
     private final ImdbDownloader downloader;
     private final ImdbCopyLoader loader;
     private final JdbcTemplate jdbc;
@@ -71,11 +65,6 @@ public class ImportService {
         ImdbCopyLoader.ImdbFiles files = ImdbCopyLoader.ImdbFiles.builder()
                 .titleBasics(resolveOrThrow(results, TITLE_BASICS_FILE))
                 .titleRatings(resolveOrThrow(results, TITLE_RATINGS_FILE))
-                .titleAkas(resolveOrThrow(results, TITLE_AKAS_FILE))
-                .titlePrincipals(resolveOrThrow(results, TITLE_PRINCIPALS_FILE))
-                .titleCrew(resolveOrThrow(results, TITLE_CREW_FILE))
-                .titleEpisode(resolveOrThrow(results, TITLE_EPISODE_FILE))
-                .nameBasics(resolveOrThrow(results, NAME_BASICS_FILE))
                 .build();
 
         Integer maxTitles = properties.getMaxTitles();

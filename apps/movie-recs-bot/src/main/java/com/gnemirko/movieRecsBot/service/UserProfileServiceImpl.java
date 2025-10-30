@@ -16,34 +16,29 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     private final UserProfileRepository repo;
 
-    @Transactional
     public UserProfile getOrCreate(Long chatId) {
         return repo.findById(chatId)
                 .orElseGet(() -> repo.save(UserProfile.builder().telegramUserId(chatId).build()));
     }
 
-    @Transactional
     public UserProfile addGenres(Long tgUserId, Collection<String> genres) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedGenres().addAll(normalize(genres));
         return p;
     }
 
-    @Transactional
     public UserProfile addActors(Long tgUserId, Collection<String> actors) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedActors().addAll(normalize(actors));
         return p;
     }
 
-    @Transactional
     public UserProfile addDirectors(Long tgUserId, Collection<String> directors) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedDirectors().addAll(normalize(directors));
         return p;
     }
 
-    @Transactional
     public UserProfile blockTags(Long tgUserId, Collection<String> tags) {
         UserProfile p = getOrCreate(tgUserId);
         p.getBlocked().addAll(normalize(tags));
@@ -78,15 +73,6 @@ public class UserProfileServiceImpl implements UserProfileService {
         return p;
     }
 
-    @Transactional
-    public void reset(Long tgUserId) {
-        UserProfile p = getOrCreate(tgUserId);
-        p.getLikedGenres().clear();
-        p.getLikedActors().clear();
-        p.getLikedDirectors().clear();
-        p.getBlocked().clear();
-        p.getWatchedMovies().clear();
-    }
 
     @Transactional
     public void reset(long chatId) {

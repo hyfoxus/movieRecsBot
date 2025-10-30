@@ -16,6 +16,8 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     secrets:
       - postgres_password
+    networks:
+      - monorepo-net
 
   bot:
     build:
@@ -40,6 +42,8 @@ services:
       - open_api_key
       - telegram_bot_token
       - postgres_password
+    networks:
+      - monorepo-net
 
 volumes:
   dbdata:
@@ -51,3 +55,7 @@ secrets:
     file: ./secrets/TELEGRAM_BOT_TOKEN
   postgres_password:
     file: ./secrets/POSTGRES_PASSWORD
+
+networks:
+  monorepo-net:
+    external: true

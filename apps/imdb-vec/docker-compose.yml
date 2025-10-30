@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  postgres:
+    build: ./docker/postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: imdb
+      POSTGRES_USER: imdb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U imdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+  imdbvec:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/imdb
+      SPRING_DATASOURCE_USERNAME: imdb
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_IMDB_DATA_DIR: /data/imdb
+      APP_OLLAMA_BASE_URL: ${APP_OLLAMA_BASE_URL:-http://ollama:11434}
+      APP_OLLAMA_HOST: ${APP_OLLAMA_HOST:-ollama}
+      APP_OLLAMA_PORT: ${APP_OLLAMA_PORT:-11434}
+      APP_ADMIN_BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN}
+    ports:
+      - "${IMDBVEC_HTTP_PORT:-8088}:8088"
+    volumes:
+      - imdbdata:/data/imdb
+
+volumes:
+  pgdata:
+  imdbdata:
+  ollama:

@@ -1,10 +1,12 @@
 services:
   db:
     image: postgres:16
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-botdb}
-      POSTGRES_USER: ${POSTGRES_USER:-botuser}
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-movie_recs}
+      POSTGRES_USER: ${POSTGRES_USER:-movie_recs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-movie_recs}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-botuser} -d ${POSTGRES_DB:-botdb}"]
       interval: 5s
@@ -14,15 +16,14 @@ services:
       - dbdata:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
-    secrets:
-      - postgres_password
+
     networks:
       - monorepo-net
 
   bot:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/movieRecBot/Dockerfile
     image: movie-recbot:dev
     env_file:
       - .env
@@ -30,31 +31,21 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-postgres}
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${POSTGRES_DB:-botdb}
-      DB_USERNAME: ${POSTGRES_USER:-botuser}
+      DB_NAME: ${POSTGRES_DB:-movie_recs}
+      DB_USERNAME: ${POSTGRES_USER:-movie_recs}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-movie_recs}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://imdb-ollama:11434}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
-    secrets:
-      - open_api_key
-      - telegram_bot_token
-      - postgres_password
     networks:
       - monorepo-net
 
 volumes:
   dbdata:
-
-secrets:
-  open_api_key:
-    file: ./secrets/OPEN_API_KEY
-  telegram_bot_token:
-    file: ./secrets/TELEGRAM_BOT_TOKEN
-  postgres_password:
-    file: ./secrets/POSTGRES_PASSWORD
 
 networks:
   monorepo-net:

@@ -8,14 +8,15 @@ import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
 import com.gnemirko.movieRecsBot.util.Jsons;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class RecommendationService {
 
@@ -53,7 +54,7 @@ public class RecommendationService {
             dialogPolicy.reset(chatId);
             out = appendOpinionReminder(out);
         } else {
-            String next = askOneQuestionOrRecommend(history, userText, profileSummary).trim();
+            String next = stripCodeFence(askOneQuestionOrRecommend(history, userText, profileSummary)).trim();
             if ("__RECOMMEND__".equalsIgnoreCase(next)) {
                 out = renderRecommendations(history, userText, profileSummary, profile);
                 dialogPolicy.reset(chatId);
@@ -77,16 +78,12 @@ public class RecommendationService {
                         Иначе задай ОДИН новый, неповторяющийся вопрос, без предисловий и без нумерации.
                         """)
                 .user(enrich(history, userText, profileSummary))
-                .options(OpenAiChatOptions.builder()
-                        .model("gpt-4o-mini")
-                        .temperature(0.2)
-                        .build())
                 .call()
                 .content();
     }
 
     private String renderRecommendations(String history, String userText, String profileSummary, UserProfile profile) {
-        String json = chatClient
+        String raw = chatClient
                 .prompt()
                 .system(SYSTEM + """
                         
@@ -101,16 +98,14 @@ public class RecommendationService {
                         Строго 3–5 фильмов. Следуй жанровым и анти-ограничениям пользователя.
                         """)
                 .user(enrich(history, userText, profileSummary))
-                .options(OpenAiChatOptions.builder()
-                        .model("gpt-4o-mini")
-                        .temperature(0.2)
-                        .build())
                 .call()
                 .content();
+        String json = normalizeJsonPayload(raw);
 
         try {
             Jsons.read(json, RecResponse.class);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.debug("LLM response failed RecResponse validation: {}", e.getMessage());
         }
 
         Parsed parsed = parseAndFilter(json, profile, userText);
@@ -161,10 +156,43 @@ public class RecommendationService {
                 out.movies = postFilter(all, profile, userText);
             }
         } catch (Exception e) {
+            log.debug("Failed to parse LLM JSON payload: {}", e.getMessage());
             out.movies = List.of();
         }
         if (out.movies == null) out.movies = List.of();
         return out;
+    }
+
+    private String normalizeJsonPayload(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = stripCodeFence(raw).trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
+        int opening = trimmed.indexOf('{');
+        int closing = trimmed.lastIndexOf('}');
+        if (opening >= 0 && closing > opening) {
+            return trimmed.substring(opening, closing + 1);
+        }
+        return trimmed;
+    }
+
+    private String stripCodeFence(String text) {
+        if (text == null) {
+            return "";
+        }
+        String trimmed = text.trim();
+        if (!trimmed.startsWith("```")) {
+            return trimmed;
+        }
+        String withoutFence = trimmed.replaceFirst("^```[a-zA-Z0-9]*\\s*", "");
+        int fenceEnd = withoutFence.lastIndexOf("```");
+        if (fenceEnd >= 0) {
+            withoutFence = withoutFence.substring(0, fenceEnd);
+        }
+        return withoutFence.trim();
     }
 
     private List<Movie> postFilter(List<Movie> movies, UserProfile profile, String userText) {

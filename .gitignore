@@ -3,8 +3,9 @@ target/
 movieRecBot/.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
-secrets/
-apps/movie-recs-bot/.env
+apps/movieRecBot/secrets/
+apps/movieRecBot/.env
+apps/imdb-vec/.env
 
 ### STS ###
 .apt_generated

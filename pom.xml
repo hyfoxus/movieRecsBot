@@ -21,7 +21,7 @@
 
     <modules>
         <module>apps/movieRecBot</module>
-        <module>apps/imdbvec</module>
+        <module>apps/imdb-vec</module>
     </modules>
 
     <properties>

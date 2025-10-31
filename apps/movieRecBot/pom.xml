@@ -11,7 +11,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>movie-recs-bot</artifactId>
+    <artifactId>movieRecBot</artifactId>
     <name>movieRecsBot</name>
     <description>Telegram bot with Spring AI for movie recommendations</description>
 
@@ -44,7 +44,7 @@
 
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <artifactId>spring-ai-starter-model-ollama</artifactId>
         </dependency>
 
         <dependency>

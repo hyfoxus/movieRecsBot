@@ -8,48 +8,50 @@ services:
   movie-recs-db:
     image: postgres:16
     container_name: movie-recs-db
+    env_file:
+      - ./apps/movieRecBot/.env
     environment:
-      POSTGRES_DB: ${MOVIE_RECS_POSTGRES_DB:-botdb}
-      POSTGRES_USER: ${MOVIE_RECS_POSTGRES_USER:-botuser}
-      POSTGRES_PASSWORD_FILE: /run/secrets/movie_recs_postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-botdb}
+      POSTGRES_USER: ${POSTGRES_USER:-botuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${MOVIE_RECS_POSTGRES_USER:-botuser} -d ${MOVIE_RECS_POSTGRES_DB:-botdb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-botuser} -d ${POSTGRES_DB:-botdb}"]
       interval: 5s
       timeout: 3s
       retries: 10
     volumes:
       - movie-recs-dbdata:/var/lib/postgresql/data
     ports:
-      - "${MOVIE_RECS_POSTGRES_PORT:-15432}:5432"
-    secrets:
-      - movie_recs_postgres_password
+      - "${POSTGRES_PORT:-15432}:5432"
     networks:
       - monorepo-net
 
   movie-recs-bot:
     container_name: movie-recs-bot
     build:
-      context: ./apps/movieRecBot
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/movieRecBot/Dockerfile
     image: movie-recs-bot:dev
     env_file:
       - ./apps/movieRecBot/.env
     environment:
-      SPRING_PROFILES_ACTIVE: ${MOVIE_RECS_SPRING_PROFILES_ACTIVE:-postgres}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-postgres}
       DB_HOST: movie-recs-db
       DB_PORT: 5432
-      DB_NAME: ${MOVIE_RECS_POSTGRES_DB:-botdb}
-      DB_USERNAME: ${MOVIE_RECS_POSTGRES_USER:-botuser}
+      DB_NAME: ${POSTGRES_DB:-botdb}
+      DB_USERNAME: ${POSTGRES_USER:-botuser}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://imdb-ollama:11434}
     depends_on:
       movie-recs-db:
         condition: service_healthy
+      imdb-ollama:
+        condition: service_started
     ports:
-      - "${MOVIE_RECS_HTTP_PORT:-8080}:8080"
+      - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
     secrets:
-      - movie_recs_open_api_key
       - movie_recs_telegram_bot_token
-      - movie_recs_postgres_password
     networks:
       - monorepo-net
 
@@ -119,9 +121,5 @@ volumes:
   imdb-ollama:
 
 secrets:
-  movie_recs_open_api_key:
-    file: ./secrets/OPEN_API_KEY
   movie_recs_telegram_bot_token:
     file: ./secrets/TELEGRAM_BOT_TOKEN
-  movie_recs_postgres_password:
-    file: ./secrets/POSTGRES_PASSWORD

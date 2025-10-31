@@ -1,6 +1,6 @@
 # MovieRecBot
 
-Telegram bot for movie recommendations powered by Spring Boot, PostgreSQL, and Spring AI. The bot keeps lightweight user profiles, queues long-running recommendation requests, and delivers replies asynchronously through Telegram webhooks.
+Telegram bot for movie recommendations powered by Spring Boot, PostgreSQL, Spring AI, and a local Llama 3 instance served by Ollama. The bot keeps lightweight user profiles, queues long-running recommendation requests, and delivers replies asynchronously through Telegram webhooks.
 
 ---
 
@@ -43,33 +43,35 @@ cd movieRecsBot
    ```bash
    cp .env.sample .env
    ```
-2. Edit `.env` and fill in the non-sensitive values:
+2. Edit `.env` and fill in the values:
 
    | Variable                   | Description                                                                |
    |----------------------------|----------------------------------------------------------------------------|
    | `TELEGRAM_WEBHOOK_URL`     | Public HTTPS endpoint that Telegram should call (e.g. https://bot.example.com). |
    | `TELEGRAM_BOT_WEBHOOK_PATH`| Path your server exposes for Telegram updates (default `/tg/webhook`).    |
    | `SPRING_PROFILES_ACTIVE`   | Recommended `postgres` when running with Docker Compose.                  |
+   | `OLLAMA_BASE_URL`          | Base URL of the Ollama runtime (default `http://imdb-ollama:11434`).      |
+   | `POSTGRES_PASSWORD`        | Password that both the DB container and the bot will use.                 |
 
-   API keys and database passwords are injected via Docker secrets, so keep them out of `.env`.
+   The `.env` file stays local (it’s already ignored by Git), so it’s safe to keep the database password there.
 
 ---
 
 ## 3. Create Docker Secrets
 
-Docker Compose expects three files inside `secrets/`. Each file must contain **only** the secret value with no extra whitespace.
+Only the Telegram token is provided via Docker secrets. Create the file inside `secrets/` with **only** the secret value and no trailing newline.
 
 ```bash
 mkdir -p secrets
-printf '%s' 'your-openai-api-key'        > secrets/OPEN_API_KEY
 printf '%s' 'your-telegram-bot-token'    > secrets/TELEGRAM_BOT_TOKEN
-printf '%s' 'strong-postgres-password'   > secrets/POSTGRES_PASSWORD
 ```
 
 Recommendations:
 - Store the files securely (password manager, encrypted volume, etc.).
 - Add `secrets/` to your `.gitignore` (already done in this repo) so you never commit real credentials.
-- If you rotate any secret, update the corresponding file and restart the stack.
+- If you rotate the token, update the file and restart the stack.
+
+Database credentials now live in `.env` (see step 2); update that file whenever you change the password.
 
 ---
 
@@ -83,7 +85,7 @@ docker compose up --build
 
 What happens:
 - `db` service launches PostgreSQL 16 with data persisted in the `dbdata` volume.
-- `bot` service builds the Spring Boot application, loads secrets from `/run/secrets/*`, and starts with the `postgres` profile.
+- `bot` service builds the Spring Boot application, loads the Telegram token from `/run/secrets/TELEGRAM_BOT_TOKEN`, and starts with the `postgres` profile.
 - The webhook controller listens on port `8080`. Expose or tunnel this port publicly so Telegram can deliver updates.
 
 Common commands:
@@ -108,7 +110,7 @@ Common commands:
    export DB_NAME=movie_recs
    export DB_USERNAME=movie_recs
    export DB_PASSWORD=your-password
-   export OPENAI_API_KEY=... # avoid committing
+   export OLLAMA_BASE_URL=http://localhost:11434
    export TELEGRAM_BOT_TOKEN=...
    export SPRING_PROFILES_ACTIVE=postgres
    ```
@@ -136,8 +138,8 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 
 | Symptom                                      | Possible Fix                                                                                         |
 |----------------------------------------------|-------------------------------------------------------------------------------------------------------|
-| Bot replies “Очередь пуста.” but no response | Check `docker compose logs bot` for errors communicating with Telegram or the OpenAI API.            |
-| Database connection failures                 | Confirm the password in `secrets/POSTGRES_PASSWORD` matches the one supplied to the DB service.      |
+| Bot replies “Очередь пуста.” but no response | Check `docker compose logs bot` for errors communicating with Telegram or the Ollama runtime.        |
+| Database connection failures                 | Confirm `POSTGRES_PASSWORD` in `.env` matches the password stored inside PostgreSQL (alter it or recreate the volume if needed). |
 | Webhook warnings on startup                  | Ensure `TELEGRAM_WEBHOOK_URL` (and public endpoint) is set; rerun if the URL changes.                 |
 | Stuck tasks in `/status`                     | Restart the stack—pending jobs resume on boot and completed jobs are purged automatically.           |
 

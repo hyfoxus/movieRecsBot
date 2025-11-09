@@ -1,6 +1,6 @@
 # MovieRecBot
 
-Telegram bot for movie recommendations powered by Spring Boot, PostgreSQL, Spring AI, and a local Llama 3 instance served by Ollama. The bot keeps lightweight user profiles, queues long-running recommendation requests, and delivers replies asynchronously through Telegram webhooks.
+Telegram bot for movie recommendations powered by Spring Boot, PostgreSQL, Spring AI, and OpenAI’s GPT‑4o mini model. The bot keeps lightweight user profiles, queues long-running recommendation requests, and delivers replies asynchronously through Telegram webhooks.
 
 ---
 
@@ -45,15 +45,17 @@ cd movieRecsBot
    ```
 2. Edit `.env` and fill in the values:
 
-   | Variable                   | Description                                                                |
-   |----------------------------|----------------------------------------------------------------------------|
-   | `TELEGRAM_WEBHOOK_URL`     | Public HTTPS endpoint that Telegram should call (e.g. https://bot.example.com). |
-   | `TELEGRAM_BOT_WEBHOOK_PATH`| Path your server exposes for Telegram updates (default `/tg/webhook`).    |
-   | `SPRING_PROFILES_ACTIVE`   | Recommended `postgres` when running with Docker Compose.                  |
-   | `OLLAMA_BASE_URL`          | Base URL of the Ollama runtime (default `http://imdb-ollama:11434`).      |
-   | `POSTGRES_PASSWORD`        | Password that both the DB container and the bot will use.                 |
+| Variable                   | Description                                                                |
+|----------------------------|----------------------------------------------------------------------------|
+| `TELEGRAM_WEBHOOK_URL`     | Public HTTPS endpoint that Telegram should call (e.g. https://bot.example.com). |
+| `TELEGRAM_BOT_WEBHOOK_PATH`| Path your server exposes for Telegram updates (default `/tg/webhook`).    |
+| `SPRING_PROFILES_ACTIVE`   | Recommended `postgres` when running with Docker Compose.                  |
+| `OPENAI_API_KEY`           | OpenAI API key with access to GPT‑4o mini.                                 |
+| `OPENAI_BASE_URL`          | Override only if you route through a proxy (default `https://api.openai.com`). |
+| `OPENAI_MODEL`             | Chat model identifier (default `gpt-4o-mini`).                             |
+| `POSTGRES_PASSWORD`        | Password that both the DB container and the bot will use.                 |
 
-   The `.env` file stays local (it’s already ignored by Git), so it’s safe to keep the database password there.
+   The `.env` file stays local (it’s already ignored by Git), so it’s safe to keep the database password there. Treat `OPENAI_API_KEY` as sensitive—use a secret manager or override it via environment variables in CI/CD when possible.
 
 ---
 
@@ -110,7 +112,9 @@ Common commands:
    export DB_NAME=movie_recs
    export DB_USERNAME=movie_recs
    export DB_PASSWORD=your-password
-   export OLLAMA_BASE_URL=http://localhost:11434
+   export OPENAI_API_KEY=sk-your-token
+   export OPENAI_BASE_URL=https://api.openai.com
+   export OPENAI_MODEL=gpt-4o-mini
    export TELEGRAM_BOT_TOKEN=...
    export SPRING_PROFILES_ACTIVE=postgres
    ```
@@ -138,7 +142,7 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 
 | Symptom                                      | Possible Fix                                                                                         |
 |----------------------------------------------|-------------------------------------------------------------------------------------------------------|
-| Bot replies “Очередь пуста.” but no response | Check `docker compose logs bot` for errors communicating with Telegram or the Ollama runtime.        |
+| Bot replies “Очередь пуста.” but no response | Check `docker compose logs bot` for errors communicating with Telegram or the OpenAI API.            |
 | Database connection failures                 | Confirm `POSTGRES_PASSWORD` in `.env` matches the password stored inside PostgreSQL (alter it or recreate the volume if needed). |
 | Webhook warnings on startup                  | Ensure `TELEGRAM_WEBHOOK_URL` (and public endpoint) is set; rerun if the URL changes.                 |
 | Stuck tasks in `/status`                     | Restart the stack—pending jobs resume on boot and completed jobs are purged automatically.           |
@@ -147,9 +151,19 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 
 ## Security Notes
 
-- Secrets live outside Git and are mounted into containers via Docker secrets.
-- Rotate API keys regularly and update the corresponding secret files.
+- Store the Telegram token as a Docker secret; keep the OpenAI API key outside version control (secret store, env vars, vault).
+- Rotate API keys regularly and update the corresponding secret material.
 - When deploying to production, use your orchestrator’s secret store (Docker Swarm, Kubernetes, or CI/CD vault) instead of plaintext files.
+
+---
+
+## IMDb Data Enrichment
+
+The sibling `apps/imdb-vec` service now hydrates its `movie` catalog with the full IMDb TSV bundle:
+`title.basics`, `title.ratings`, `title.akas`, `title.crew`, `title.principals`, `title.episode`, and `name.basics`.
+During import the loader folds that data into JSONB columns (`akas`, `directors`, `writers`, `principals`, `episode`)
+so downstream consumers have maximum context without altering application code. Embedding text generation now also
+includes director names to bias similarity search toward key creative talent.
 
 ---
 

@@ -16,6 +16,7 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     private final UserProfileRepository repo;
 
+
     public UserProfile getOrCreate(Long chatId) {
         return repo.findById(chatId)
                 .orElseGet(() -> repo.save(UserProfile.builder().telegramUserId(chatId).build()));

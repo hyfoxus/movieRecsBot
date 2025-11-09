@@ -34,7 +34,9 @@ services:
       DB_NAME: ${POSTGRES_DB:-movie_recs}
       DB_USERNAME: ${POSTGRES_USER:-movie_recs}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-movie_recs}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     depends_on:
       db:
         condition: service_healthy

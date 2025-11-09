@@ -41,12 +41,12 @@ services:
       DB_NAME: ${POSTGRES_DB:-botdb}
       DB_USERNAME: ${POSTGRES_USER:-botuser}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     depends_on:
       movie-recs-db:
         condition: service_healthy
-      imdb-ollama:
-        condition: service_started
     ports:
       - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped

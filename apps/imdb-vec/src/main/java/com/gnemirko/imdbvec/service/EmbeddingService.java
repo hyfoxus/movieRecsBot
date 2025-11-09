@@ -2,6 +2,7 @@ package com.gnemirko.imdbvec.service;
 
 import com.gnemirko.imdbvec.model.Movie;
 import com.gnemirko.imdbvec.repo.MovieRepository;
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,11 +19,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -73,7 +70,6 @@ public class EmbeddingService {
                 "prompt", text == null ? "" : text,
                 "stream", false
         );
-
         Duration backoff = retryDelay.isZero() ? Duration.ofMillis(250) : retryDelay;
         int attempts = Math.max(1, maxRetries);
         Retry retrySpec = Retry.backoff(Math.max(1, attempts), backoff)
@@ -112,8 +108,8 @@ public class EmbeddingService {
         } catch (RuntimeException ex) {
             throw new IllegalStateException("Failed to fetch embedding after " + attempts + " attempts", ex);
         }
-    }
 
+    }
     /**
      * Backfill embeddings for movies without a vector.
      * Processes records in bounded batches to avoid loading the entire catalog.
@@ -149,6 +145,11 @@ public class EmbeddingService {
         List<String> tags = buildTags(movie);
         if (!tags.isEmpty()) {
             sb.append("\n\nTags: ").append(String.join(", ", tags));
+        }
+
+        List<String> directors = extractDirectorNames(movie);
+        if (!directors.isEmpty()) {
+            sb.append("\n\nDirectors: ").append(String.join(", ", directors));
         }
 
         return sb.toString();
@@ -210,6 +211,28 @@ public class EmbeddingService {
             tags.add("votes:" + movie.getVotes());
         }
         return tags;
+    }
+
+    private List<String> extractDirectorNames(Movie movie) {
+        if (movie.getDirectors() == null || movie.getDirectors().isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (Map<String, Object> director : movie.getDirectors()) {
+            if (director == null) continue;
+            Object rawName = director.get("name");
+            String name = rawName instanceof String s ? s.trim() : null;
+            if (name == null || name.isEmpty()) {
+                Object rawId = director.get("nconst");
+                if (rawId instanceof String s && !s.isBlank()) {
+                    name = s.trim();
+                }
+            }
+            if (name != null && !name.isEmpty()) {
+                names.add(name);
+            }
+        }
+        return List.copyOf(names);
     }
 
     private String firstNonBlank(String... values) {

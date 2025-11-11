@@ -6,6 +6,7 @@ import com.gnemirko.movieRecsBot.dto.RecResponse;
 import com.gnemirko.movieRecsBot.entity.MovieOpinion;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
+import com.gnemirko.movieRecsBot.mcp.MovieContextService;
 import com.gnemirko.movieRecsBot.util.Jsons;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class RecommendationService {
     private final UserContextService userContextService;
     private final DialogPolicy dialogPolicy;
     private final UserProfileService userProfileService;
+    private final MovieContextService movieContextService;
 
     private static final String SYSTEM = """
             Ты — MovieMate, помощник по рекомендациям фильмов.
@@ -47,16 +49,17 @@ public class RecommendationService {
         UserProfile profile = userProfileService.getOrCreate(chatId);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
+        String movieContext = movieContextService.buildContextBlock(userText, profileSummary, profile);
         boolean force = dialogPolicy.recommendNow(chatId, userText);
         String out;
         if (force) {
-            out = renderRecommendations(history, userText, profileSummary, profile);
+            out = renderRecommendations(history, userText, profileSummary, movieContext, profile);
             dialogPolicy.reset(chatId);
             out = appendOpinionReminder(out);
         } else {
-            String next = stripCodeFence(askOneQuestionOrRecommend(history, userText, profileSummary)).trim();
+            String next = stripCodeFence(askOneQuestionOrRecommend(history, userText, profileSummary, movieContext)).trim();
             if ("__RECOMMEND__".equalsIgnoreCase(next)) {
-                out = renderRecommendations(history, userText, profileSummary, profile);
+                out = renderRecommendations(history, userText, profileSummary, movieContext, profile);
                 dialogPolicy.reset(chatId);
                 out = appendOpinionReminder(out);
             } else {
@@ -69,7 +72,7 @@ public class RecommendationService {
         return out;
     }
 
-    private String askOneQuestionOrRecommend(String history, String userText, String profileSummary) {
+    private String askOneQuestionOrRecommend(String history, String userText, String profileSummary, String movieContext) {
         return chatClient
                 .prompt()
                 .system(SYSTEM + """
@@ -77,12 +80,16 @@ public class RecommendationService {
                         Если информации достаточно — ответь ровно строкой "__RECOMMEND__".
                         Иначе задай ОДИН новый, неповторяющийся вопрос, без предисловий и без нумерации.
                         """)
-                .user(enrich(history, userText, profileSummary))
+                .user(enrich(history, userText, profileSummary, movieContext))
                 .call()
                 .content();
     }
 
-    private String renderRecommendations(String history, String userText, String profileSummary, UserProfile profile) {
+    private String renderRecommendations(String history,
+                                         String userText,
+                                         String profileSummary,
+                                         String movieContext,
+                                         UserProfile profile) {
         String raw = chatClient
                 .prompt()
                 .system(SYSTEM + """
@@ -97,7 +104,7 @@ public class RecommendationService {
                         }
                         Строго 3–5 фильмов. Следуй жанровым и анти-ограничениям пользователя.
                         """)
-                .user(enrich(history, userText, profileSummary))
+                .user(enrich(history, userText, profileSummary, movieContext))
                 .call()
                 .content();
         String json = normalizeJsonPayload(raw);
@@ -215,10 +222,13 @@ public class RecommendationService {
         return out;
     }
 
-    private String enrich(String history, String userText, String profileSummary) {
+    private String enrich(String history, String userText, String profileSummary, String movieContext) {
         StringBuilder sb = new StringBuilder();
         if (!history.isBlank()) sb.append("История (сокр.):\n").append(history).append("\n\n");
         if (!profileSummary.isBlank()) sb.append("Профиль пользователя:\n").append(profileSummary).append("\n\n");
+        if (movieContext != null && !movieContext.isBlank()) {
+            sb.append(movieContext.trim()).append("\n\n");
+        }
         sb.append("Пользователь: ").append(userText);
         return sb.toString();
     }

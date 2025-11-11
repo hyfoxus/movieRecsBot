@@ -21,3 +21,8 @@ logging:
   level:
     root: INFO
     com.gnemirko.movieRecsBot: DEBUG
+
+app:
+  mcp:
+    base-url: ${MCP_BASE_URL:http://imdb-mcp:8082}
+    timeout-ms: ${MCP_TIMEOUT_MS:4000}

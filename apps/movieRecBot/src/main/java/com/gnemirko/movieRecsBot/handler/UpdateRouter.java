@@ -131,7 +131,7 @@ public class UpdateRouter {
                 if ("/start".equals(command)) {
                     return SendMessage.builder()
                             .chatId(String.valueOf(chatId))
-                            .text("👋 Привет! Напиши жанр/настроение или команду /help")
+                            .text("👋 Привет! Напиши жанр/настроение и подберу тебе фильм!")
                             .disableWebPagePreview(true)
                             .build();
                 }
@@ -228,11 +228,7 @@ public class UpdateRouter {
             String displayId = task.getDisplayId();
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
-                    // uncomment this if you want to see the text about query in chat
-//                    .text("✅ Запрос принят\\. Задача №" + displayId + " в очереди\\.\n" +
-//                            "Напиши `/status " + displayId + "` чтобы посмотреть прогресс\\.")
-//                    .parseMode("MarkdownV2")
-//                    .replyMarkup(miniMenu.mainMenu())
+                    .text("✅ Запрос принят. Задача №" + displayId + " поставлена в очередь.")
                     .disableWebPagePreview(true)
                     .build();
         }

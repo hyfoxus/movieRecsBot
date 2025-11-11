@@ -132,8 +132,8 @@ public class TaskManagerService {
             log.debug("Recommendation task {} ({}) completed successfully", taskId, displayId);
             sendMessage(SendMessage.builder()
                     .chatId(String.valueOf(t.getChatId()))
-                    .text(text)
-                    .parseMode("HTML")
+                    .text(sanitizeForTelegram(text))
+                    .disableWebPagePreview(true)
                     .build());
 
         } catch (Exception e) {
@@ -188,6 +188,7 @@ public class TaskManagerService {
         if (html == null || html.isEmpty()) return "";
         String plain = html
                 .replace("<br/>", "\n")
+                .replace("<br />", "\n")
                 .replace("<br>", "\n");
         plain = plain.replaceAll("<[^>]+>", "");
         return plain
@@ -196,5 +197,18 @@ public class TaskManagerService {
                 .replace("&gt;", ">")
                 .replace("&quot;", "\"")
                 .replace("&#39;", "'");
+    }
+
+    private String sanitizeForTelegram(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        String plain = htmlToPlain(text);
+        plain = plain
+                .replace("**", "")
+                .replace("__", "")
+                .replace("`", "");
+        plain = plain.replaceAll("\\n{3,}", "\n\n");
+        return plain.trim();
     }
 }

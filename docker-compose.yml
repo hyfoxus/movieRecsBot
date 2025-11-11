@@ -41,9 +41,6 @@ services:
       DB_NAME: ${POSTGRES_DB:-botdb}
       DB_USERNAME: ${POSTGRES_USER:-botuser}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     depends_on:
       movie-recs-db:
         condition: service_healthy
@@ -56,7 +53,7 @@ services:
       - monorepo-net
 
   imdb-postgres:
-    build: ./apps/imdbvec/docker/postgres
+    build: ./apps/imdb-vec/docker/postgres
     container_name: imdb-postgres
     restart: unless-stopped
     environment:
@@ -91,7 +88,7 @@ services:
   imdb-vec:
     container_name: imdb-vec
     build:
-      context: ./apps/imdbvec
+      context: ./apps/imdb-vec
       dockerfile: Dockerfile
     depends_on:
       imdb-postgres:
@@ -111,6 +108,24 @@ services:
       - "${IMDB_HTTP_PORT:-8088}:8088"
     volumes:
       - imdb-data:/data/imdb
+    networks:
+      - monorepo-net
+
+  imdb-mcp:
+    container_name: imdb-mcp
+    build:
+      context: ./apps/mcp-fastmcp
+      dockerfile: Dockerfile
+    depends_on:
+      imdb-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${IMDB_POSTGRES_USER:-imdb}:${IMDB_POSTGRES_PASSWORD:-changeme}@imdb-postgres:5432/${IMDB_POSTGRES_DB:-imdb}
+      OLLAMA_BASE_URL: ${IMDB_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      OLLAMA_EMBED_MODEL: ${IMDB_OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      MCP_MAX_K: ${MCP_MAX_K:-15}
+    ports:
+      - "${MCP_HTTP_PORT:-8082}:8082"
     networks:
       - monorepo-net
 

@@ -17,13 +17,16 @@ Telegram bot for movie recommendations powered by Spring Boot, PostgreSQL, Sprin
 ## Repository Layout
 
 ```
-movieRecsBot/          Spring Boot application root
-├─ src/                Java sources & resources
-├─ docker-compose.yml  Local stack (bot + PostgreSQL)
-├─ docker/entrypoint.shSecret loader used inside the runtime image
-├─ secrets/            Directory for Docker secrets (you create the files)
-├─ .env.sample         Template for non-secret environment settings
-└─ README.md           This guide
+movieRecsBot/                Monorepo root
+├─ apps/movieRecBot/         Spring Boot application (bot service)
+│  ├─ src/                   Java sources & resources
+│  └─ .env.sample            Template for bot-specific environment variables
+├─ apps/mcp-fastmcp/.env.sample Template for the FastMCP server env vars
+├─ docker-compose.yml        Local stack (bot + PostgreSQL + MCP dependencies)
+├─ docker/entrypoint.sh      Secret loader used inside the runtime image
+├─ scripts/bootstrap_env.py  Helper to generate all .env files at once
+├─ secrets/                  Directory for Docker secrets (you create the files)
+└─ README.md                 This guide
 ```
 
 ---
@@ -39,23 +42,46 @@ cd movieRecsBot
 
 ## 2. Configure Environment Variables
 
-1. Copy the environment template:
-   ```bash
-   cp .env.sample .env
-   ```
-2. Edit `.env` and fill in the values:
+The repo now ships with a helper that populates every `.env` file (bot + MCP) in one go:
+
+```bash
+python scripts/bootstrap_env.py
+```
+
+You will be prompted once for the values that matter (Telegram webhook URL, OpenAI key, database creds, Ollama endpoint, etc.). The script writes the answers into `apps/movieRecBot/.env` (bot) and `apps/mcp-fastmcp/.env` (MCP) so every service gets what it needs without repeated editing.  
+Re-run the script at any time; existing values are used as defaults. Use `--use-defaults` for non-interactive environments.
+
+Prefer editing manually? Copy the provided samples:
+
+```bash
+cp apps/movieRecBot/.env.sample apps/movieRecBot/.env
+cp apps/mcp-fastmcp/.env.sample apps/mcp-fastmcp/.env
+```
+
+### Key variables (bot)
 
 | Variable                   | Description                                                                |
 |----------------------------|----------------------------------------------------------------------------|
-| `TELEGRAM_WEBHOOK_URL`     | Public HTTPS endpoint that Telegram should call (e.g. https://bot.example.com). |
-| `TELEGRAM_BOT_WEBHOOK_PATH`| Path your server exposes for Telegram updates (default `/tg/webhook`).    |
-| `SPRING_PROFILES_ACTIVE`   | Recommended `postgres` when running with Docker Compose.                  |
-| `OPENAI_API_KEY`           | OpenAI API key with access to GPT‑4o mini.                                 |
-| `OPENAI_BASE_URL`          | Override only if you route through a proxy (default `https://api.openai.com`). |
+| `TELEGRAM_WEBHOOK_URL`     | Public HTTPS endpoint Telegram will call (e.g. https://bot.example.com).  |
+| `TELEGRAM_BOT_WEBHOOK_PATH`| Path the bot exposes for Telegram updates (default `/tg/webhook`).        |
+| `SPRING_PROFILES_ACTIVE`   | Typically `postgres` when running via Docker Compose.                      |
+| `POSTGRES_DB/USER/PASSWORD`| Credentials shared by the DB container and the bot.                        |
+| `BOT_HTTP_PORT`            | Host port where the bot listens locally (default `8080`).                  |
+| `OPENAI_API_KEY`           | OpenAI (or compatible) API key for chat completions.                       |
+| `OPENAI_BASE_URL`          | Override if proxying requests (default `https://api.openai.com`).          |
 | `OPENAI_MODEL`             | Chat model identifier (default `gpt-4o-mini`).                             |
-| `POSTGRES_PASSWORD`        | Password that both the DB container and the bot will use.                 |
+| `MCP_BASE_URL`             | Internal URL the bot uses to talk to the MCP server (default `http://imdb-mcp:8082`). |
 
-   The `.env` file stays local (it’s already ignored by Git), so it’s safe to keep the database password there. Treat `OPENAI_API_KEY` as sensitive—use a secret manager or override it via environment variables in CI/CD when possible.
+### Key variables (MCP server)
+
+| Variable             | Description                                                                 |
+|----------------------|-----------------------------------------------------------------------------|
+| `DATABASE_URL`       | SQLAlchemy-style URI for the IMDb vector database (pgvector).               |
+| `OLLAMA_BASE_URL`    | URL for the Ollama instance that serves embeddings (default `http://imdb-ollama:11434`). |
+| `OLLAMA_EMBED_MODEL` | Embedding model identifier pulled into Ollama (default `nomic-embed-text`). |
+| `MCP_MAX_K`          | Maximum number of movie rows returned to the bot per query.                 |
+
+`.env` files are ignored by Git, so it is safe to keep local DB passwords there. Treat the OpenAI key as sensitive—prefer CI/CD secret stores or environment injection when deploying.
 
 ---
 
@@ -73,7 +99,7 @@ Recommendations:
 - Add `secrets/` to your `.gitignore` (already done in this repo) so you never commit real credentials.
 - If you rotate the token, update the file and restart the stack.
 
-Database credentials now live in `.env` (see step 2); update that file whenever you change the password.
+Database credentials now live in `apps/movieRecBot/.env` (see step 2); update that file whenever you change the password.
 
 ---
 
@@ -143,7 +169,7 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 | Symptom                                      | Possible Fix                                                                                         |
 |----------------------------------------------|-------------------------------------------------------------------------------------------------------|
 | Bot replies “Очередь пуста.” but no response | Check `docker compose logs bot` for errors communicating with Telegram or the OpenAI API.            |
-| Database connection failures                 | Confirm `POSTGRES_PASSWORD` in `.env` matches the password stored inside PostgreSQL (alter it or recreate the volume if needed). |
+| Database connection failures                 | Confirm `POSTGRES_PASSWORD` in `apps/movieRecBot/.env` matches the password stored inside PostgreSQL (alter it or recreate the volume if needed). |
 | Webhook warnings on startup                  | Ensure `TELEGRAM_WEBHOOK_URL` (and public endpoint) is set; rerun if the URL changes.                 |
 | Stuck tasks in `/status`                     | Restart the stack—pending jobs resume on boot and completed jobs are purged automatically.           |
 

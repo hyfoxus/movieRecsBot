@@ -1,13 +1,12 @@
 from typing import List, Optional
 
-from sqlalchemy import text
+from sqlalchemy import text, bindparam, Integer, Float, Text
+from sqlalchemy.dialects.postgresql import ARRAY, TEXT
 
 from mcpmovie.config import get_settings
 from mcpmovie.database import session_scope
 from mcpmovie.embeddings import embed_text
 from mcpmovie.schemas import MovieContext, SearchRequest
-from mcpmovie.database import SessionLocal
-from sqlalchemy.orm import Session
 
 settings = get_settings()
 
@@ -21,29 +20,46 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
     embedding = await embed_text(request.query)
     vec_literal = _vector_literal(embedding)
 
+    where_clauses = ["m.embedding IS NOT NULL"]
+    params = {"vec": vec_literal, "limit": limit}
+
+    if request.from_year is not None:
+        where_clauses.append("m.start_year >= :fromYear")
+        params["fromYear"] = request.from_year
+    if request.to_year is not None:
+        where_clauses.append("m.start_year <= :toYear")
+        params["toYear"] = request.to_year
+    if request.runtime_minutes is not None:
+        where_clauses.append("m.runtime_minutes <= :runtimeMax")
+        params["runtimeMax"] = request.runtime_minutes
+    if request.min_rating is not None:
+        where_clauses.append("m.rating >= :minRating")
+        params["minRating"] = request.min_rating
+    inc_genres = request.include_genres or []
+    if inc_genres:
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM unnest(:incGenres) g WHERE g = ANY(m.genres))"
+        )
+        params["incGenres"] = inc_genres
+    exc_genres = request.exclude_genres or []
+    if exc_genres:
+        where_clauses.append(
+            "NOT EXISTS (SELECT 1 FROM unnest(:excGenres) g WHERE g = ANY(m.genres))"
+        )
+        params["excGenres"] = exc_genres
+
+    where_sql = " AND ".join(where_clauses)
+
     sql = text(
-        """
+        f"""
         WITH filtered AS (
             SELECT id, tconst, primary_title, start_year, rating, votes,
-                   genres, plot, akas, directors, writers, principals,
-                   episode, title_type, runtime_minutes, is_adult, embedding
+                   genres, plot, title_type, runtime_minutes, is_adult, embedding
             FROM movie m
-            WHERE (:fromYear IS NULL OR m.start_year >= :fromYear)
-              AND (:toYear   IS NULL OR m.start_year <= :toYear)
-              AND (:runtimeMax IS NULL OR m.runtime_minutes <= :runtimeMax)
-              AND (:minRating IS NULL OR m.rating >= :minRating)
-              AND (
-                    COALESCE(:incGenres, ARRAY[]::text[]) = ARRAY[]::text[]
-                    OR EXISTS (SELECT 1 FROM unnest(:incGenres) g WHERE g = ANY(m.genres))
-                  )
-              AND (
-                    COALESCE(:excGenres, ARRAY[]::text[]) = ARRAY[]::text[]
-                    OR NOT EXISTS (SELECT 1 FROM unnest(:excGenres) g WHERE g = ANY(m.genres))
-                  )
-              AND m.embedding IS NOT NULL
+            WHERE {where_sql}
         )
         SELECT tconst, primary_title, start_year, rating, votes, genres, plot,
-               akas, directors, writers, principals, episode, title_type,
+               title_type,
                runtime_minutes, is_adult,
                (1 - (embedding <=> CAST(:vec AS vector))) AS similarity
         FROM filtered
@@ -52,17 +68,6 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
         """
     )
 
-    params = {
-        "fromYear": request.from_year,
-        "toYear": request.to_year,
-        "runtimeMax": request.runtime_minutes,
-        "minRating": request.min_rating,
-        "incGenres": request.include_genres or [],
-        "excGenres": request.exclude_genres or [],
-        "vec": vec_literal,
-        "limit": limit,
-    }
-
     with session_scope() as session:
         rows = session.execute(sql, params).mappings().all()
 
@@ -70,11 +75,6 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
     for row in rows:
         metadata = {
             "plot": row.get("plot"),
-            "akas": row.get("akas"),
-            "directors": row.get("directors"),
-            "writers": row.get("writers"),
-            "principals": row.get("principals"),
-            "episode": row.get("episode"),
             "titleType": row.get("title_type"),
             "runtimeMinutes": row.get("runtime_minutes"),
             "isAdult": row.get("is_adult"),
@@ -98,7 +98,7 @@ def fetch_movie(tconst: str) -> Optional[MovieContext]:
     sql = text(
         """
         SELECT tconst, primary_title, start_year, rating, votes, genres, plot,
-               akas, directors, writers, principals, episode, title_type,
+               title_type,
                runtime_minutes, is_adult
         FROM movie
         WHERE tconst = :tconst
@@ -110,11 +110,6 @@ def fetch_movie(tconst: str) -> Optional[MovieContext]:
             return None
     metadata = {
         "plot": row.get("plot"),
-        "akas": row.get("akas"),
-        "directors": row.get("directors"),
-        "writers": row.get("writers"),
-        "principals": row.get("principals"),
-        "episode": row.get("episode"),
         "titleType": row.get("title_type"),
         "runtimeMinutes": row.get("runtime_minutes"),
         "isAdult": row.get("is_adult"),

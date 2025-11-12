@@ -185,11 +185,10 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 
 ## IMDb Data Enrichment
 
-The sibling `apps/imdb-vec` service now hydrates its `movie` catalog with the full IMDb TSV bundle:
-`title.basics`, `title.ratings`, `title.akas`, `title.crew`, `title.principals`, `title.episode`, and `name.basics`.
-During import the loader folds that data into JSONB columns (`akas`, `directors`, `writers`, `principals`, `episode`)
-so downstream consumers have maximum context without altering application code. Embedding text generation now also
-includes director names to bias similarity search toward key creative talent.
+The sibling `apps/imdb-vec` service now hydrates its `movie` catalog exclusively from `title.basics` and `title.ratings`.
+Those two TSVs are small enough to download quickly yet still provide the essentials (titles, years, genres, runtime,
+adult flag, ratings, votes) that power the recommendation pipeline. Since we dropped the massive `akas`/`episode`
+datasets, their columns were removed from the schema to keep everything lean and consistent across services.
 
 ---
 

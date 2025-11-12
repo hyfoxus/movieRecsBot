@@ -1,6 +1,5 @@
 package com.gnemirko.movieRecsBot.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,14 +12,16 @@ import org.springframework.util.AntPathMatcher;
 public class SecurityConfig {
 
     private final AntPathMatcher antMatcher = new AntPathMatcher();
+    private final TelegramWebhookProperties webhookProperties;
+
+    public SecurityConfig(TelegramWebhookProperties webhookProperties) {
+        this.webhookProperties = webhookProperties;
+    }
 
     @Bean
-    SecurityFilterChain filterChain(
-            HttpSecurity http,
-            @Value("${telegram.bot.webhook-path:/tg/webhook}") String webhookPath
-    ) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
-        String normalizedPath = normalizePath(webhookPath);
+        String normalizedPath = webhookProperties.getNormalizedPath();
         RequestMatcher webhookMatcher = request ->
                 antMatcher.match(normalizedPath, request.getServletPath());
         RequestMatcher webhookChildrenMatcher = request ->
@@ -40,9 +41,4 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private static String normalizePath(String rawPath) {
-        if (rawPath == null || rawPath.isBlank()) return "/tg/webhook";
-        String trimmed = rawPath.trim();
-        return trimmed.startsWith("/") ? trimmed : "/" + trimmed;
-    }
 }

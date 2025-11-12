@@ -16,6 +16,12 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.escapeHtml;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.htmlToPlain;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.sanitize;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.scrubMarkdownArtifacts;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.stripCodeFence;
+
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -37,11 +43,14 @@ public class RecommendationService {
             4) Всегда соблюдай жанровые и анти-предпочтения пользователя. Если запросил фэнтези — не предлагай нефэнтези.
             5) Краткость: 3–5 фильмов, для каждого — 1 короткое объяснение, почему подходит.
             6) Для ответа используй тот же язык, что использовал в последнем сообщении пользователь.
+            7) Если пользователь просто здоровается или говорит не по делу — ответь дружелюбно, напомни, что ты подбираешь фильмы, и мягко уточни, что он хочет посмотреть.
+            8) Всегда держи разговор в кинотеме: обсуждай жанры, настроение, актёров, недавние просмотры и т.п., чтобы лучше понять запрос.
+            9) Не лги о параметрах фильма: не лги о актерах, не лги о годе выпуска, не лги о жанрах.Wu
             
-            ФОРМАТ ДЛЯ TELEGRAM (MarkdownV2):
+            ФОРМАТ ДЛЯ TELEGRAM (HTML):
             - Вступление — одна строка.
             - Далее пронумерованный список.
-            - Название и год выделяй жирным: **Название (Год)**.
+            - Название и год выделяй жирным: <br>Название (Год)</br>.
             - Без ссылок и кода. Минимум спецсимволов.
             """;
 
@@ -64,7 +73,7 @@ public class RecommendationService {
                 out = appendOpinionReminder(out);
             } else {
                 dialogPolicy.countClarifying(chatId);
-                out = escapeHtml(next);
+                out = sanitize(next);
             }
         }
         userContextService.append(chatId, "User: " + userText);
@@ -117,11 +126,11 @@ public class RecommendationService {
 
         Parsed parsed = parseAndFilter(json, profile, userText);
         if (parsed.movies.isEmpty()) {
-            return escapeHtml("Не нашёл подходящих вариантов. Напишите 1–2 любимых фильма — подберу похожие.");
+            return sanitize("Не нашёл подходящих вариантов. Напишите 1–2 любимых фильма — подберу похожие.");
         }
         StringBuilder sb = new StringBuilder();
         if (!isBlank(parsed.intro)) {
-            sb.append("<b>").append(escapeHtml(parsed.intro)).append("</b>\n\n");
+            sb.append("<b>").append(escapeHtml(stripMarkdown(parsed.intro))).append("</b>\n\n");
         }
         int idx = 1;
         for (Movie movie : parsed.movies) {
@@ -132,10 +141,10 @@ public class RecommendationService {
             if (movie.year != null && !containsYear(rawTitle, movie.year)) {
                 sb.append(" (").append(movie.year).append(")");
             }
-            sb.append("</b> — ").append(escapeHtml(nvl(movie.reason))).append("\n\n");
+            sb.append("</b> — ").append(escapeHtml(stripMarkdown(nvl(movie.reason)))).append("\n\n");
             idx++;
         }
-        return sb.toString().trim();
+        return scrubMarkdownArtifacts(sb.toString().trim());
     }
 
     private Parsed parseAndFilter(String json, UserProfile profile, String userText) {
@@ -184,22 +193,6 @@ public class RecommendationService {
             return trimmed.substring(opening, closing + 1);
         }
         return trimmed;
-    }
-
-    private String stripCodeFence(String text) {
-        if (text == null) {
-            return "";
-        }
-        String trimmed = text.trim();
-        if (!trimmed.startsWith("```")) {
-            return trimmed;
-        }
-        String withoutFence = trimmed.replaceFirst("^```[a-zA-Z0-9]*\\s*", "");
-        int fenceEnd = withoutFence.lastIndexOf("```");
-        if (fenceEnd >= 0) {
-            withoutFence = withoutFence.substring(0, fenceEnd);
-        }
-        return withoutFence.trim();
     }
 
     private List<Movie> postFilter(List<Movie> movies, UserProfile profile, String userText) {
@@ -280,19 +273,7 @@ public class RecommendationService {
 
     private static String stripMarkdown(String value) {
         if (value == null || value.isEmpty()) return "";
-        return value.replaceAll("\\*+", "");
-    }
-
-    private static String htmlToPlain(String html) {
-        if (html == null || html.isEmpty()) return "";
-        String plain = html.replace("<br/>", "\n").replace("<br>", "\n");
-        plain = plain.replaceAll("<[^>]+>", "");
-        return plain
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'");
+        return value.replaceAll("[\\*_`~]+", "");
     }
 
     private String shortOpinion(MovieOpinion op) {
@@ -307,24 +288,7 @@ public class RecommendationService {
     private String appendOpinionReminder(String text) {
         if (text == null || text.isBlank()) return text;
         String reminder = "<i>" + escapeHtml("Когда посмотришь фильм, напиши /watched и поделись мнением — я буду точнее.") + "</i>";
-        return text + "\n\n" + reminder;
-    }
-
-    private static String escapeHtml(String s) {
-        if (s == null || s.isEmpty()) return "";
-        StringBuilder out = new StringBuilder(s.length() + 16);
-        for (char c : s.toCharArray()) {
-            switch (c) {
-                case '&' -> out.append("&amp;");
-                case '<' -> out.append("&lt;");
-                case '>' -> out.append("&gt;");
-                case '"' -> out.append("&quot;");
-                case '\'' -> out.append("&#39;");
-                case '\n' -> out.append("<br/>");
-                default -> out.append(c);
-            }
-        }
-        return out.toString();
+        return scrubMarkdownArtifacts(text) + "\n\n" + reminder;
     }
 
     private static final class Parsed {

@@ -3,7 +3,6 @@ package com.gnemirko.imdbvec.importer;
 import com.gnemirko.imdbvec.config.ImdbImportProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,24 +19,19 @@ public class ImportService {
 
     private static final String TITLE_BASICS_FILE = "title.basics.tsv.gz";
     private static final String TITLE_RATINGS_FILE = "title.ratings.tsv.gz";
-    private static final String TITLE_AKAS_FILE = "title.akas.tsv.gz";
-    private static final String TITLE_CREW_FILE = "title.crew.tsv.gz";
-    private static final String TITLE_PRINCIPALS_FILE = "title.principals.tsv.gz";
-    private static final String TITLE_EPISODE_FILE = "title.episode.tsv.gz";
-    private static final String NAME_BASICS_FILE = "name.basics.tsv.gz";
     private final ImdbDownloader downloader;
     private final ImdbCopyLoader loader;
-    private final JdbcTemplate jdbc;
     private final ImdbImportProperties properties;
+    private final ImdbDownloadMetadataStore metadataStore;
 
     public ImportService(ImdbDownloader downloader,
                          ImdbCopyLoader loader,
-                         JdbcTemplate jdbc,
-                         ImdbImportProperties properties) {
+                         ImdbImportProperties properties,
+                         ImdbDownloadMetadataStore metadataStore) {
         this.downloader = downloader;
         this.loader = loader;
-        this.jdbc = jdbc;
         this.properties = properties;
+        this.metadataStore = metadataStore;
     }
 
     @Transactional
@@ -53,8 +47,9 @@ public class ImportService {
         for (String file : filesToFetch) {
             var url = properties.resolveDownloadUri(file);
             Path targetDir = properties.getDataDir();
-            Optional<String> etag = Optional.empty();
-            Optional<String> lastMod = Optional.empty();
+            ImdbDownloadMetadataStore.Metadata metadata = metadataStore.load(targetDir, file);
+            Optional<String> etag = metadata.etag();
+            Optional<String> lastMod = metadata.lastModified();
 
             log.info("Downloading {} from {}", file, url);
             ImdbDownloader.DownloadResult download = downloader.downloadGzAtomically(
@@ -64,17 +59,15 @@ public class ImportService {
                     etag,
                     lastMod
             );
+            if (!download.notModified()) {
+                metadataStore.store(targetDir, file, download.etag(), download.lastModified());
+            }
             results.put(file, download);
         }
 
         ImdbCopyLoader.ImdbFiles files = ImdbCopyLoader.ImdbFiles.builder()
                 .titleBasics(resolveOrThrow(results, TITLE_BASICS_FILE))
                 .titleRatings(resolveOrThrow(results, TITLE_RATINGS_FILE))
-                .titleAkas(resolveOrThrow(results, TITLE_AKAS_FILE))
-                .titleCrew(resolveOrThrow(results, TITLE_CREW_FILE))
-                .titlePrincipals(resolveOrThrow(results, TITLE_PRINCIPALS_FILE))
-                .titleEpisode(resolveOrThrow(results, TITLE_EPISODE_FILE))
-                .nameBasics(resolveOrThrow(results, NAME_BASICS_FILE))
                 .build();
 
         Integer maxTitles = properties.getMaxTitles();

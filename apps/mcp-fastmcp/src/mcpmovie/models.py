@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, Float, Boolean, SmallInteger, String, text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -21,12 +21,6 @@ class Movie(Base):
     rating = Column(Float)
     votes = Column(Integer)
     plot = Column(String)
-    akas = Column(JSONB)
-    directors = Column(JSONB)
-    writers = Column(JSONB)
-    principals = Column(JSONB)
-    episode = Column(JSONB)
     embedding_model = Column(String)
 
     similarity = Column(Float, nullable=True, default=None)  # populated via queries
-

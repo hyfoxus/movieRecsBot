@@ -18,6 +18,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static com.gnemirko.movieRecsBot.entity.RecommendationTask.Status.*;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.htmlToPlain;
 
 @Slf4j
 @Service
@@ -64,6 +65,7 @@ public class TaskManagerService {
                 .createdAt(Instant.now())
                 .build();
         RecommendationTask saved = repo.save(t);
+        log.info("Queued recommendation task {} for chat {}", displayId, chatId);
         dispatch(saved.getId());
         return saved;
     }
@@ -110,7 +112,7 @@ public class TaskManagerService {
         }
 
         String displayId = t.getDisplayId();
-        log.debug("Starting recommendation task {} ({})", taskId, displayId);
+        log.info("Starting recommendation task {} ({}) for chat {}", taskId, displayId, t.getChatId());
         t.setStatus(RUNNING);
         t.setStartedAt(Instant.now());
         repo.save(t);
@@ -129,10 +131,11 @@ public class TaskManagerService {
             t.setFinishedAt(Instant.now());
             repo.save(t);
 
-            log.debug("Recommendation task {} ({}) completed successfully", taskId, displayId);
+            log.info("Recommendation task {} ({}) completed successfully", taskId, displayId);
             sendMessage(SendMessage.builder()
                     .chatId(String.valueOf(t.getChatId()))
-                    .text(sanitizeForTelegram(text))
+                    .text(text)
+                    .parseMode("HTML")
                     .disableWebPagePreview(true)
                     .build());
 
@@ -184,31 +187,4 @@ public class TaskManagerService {
         }
     }
 
-    private String htmlToPlain(String html) {
-        if (html == null || html.isEmpty()) return "";
-        String plain = html
-                .replace("<br/>", "\n")
-                .replace("<br />", "\n")
-                .replace("<br>", "\n");
-        plain = plain.replaceAll("<[^>]+>", "");
-        return plain
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'");
-    }
-
-    private String sanitizeForTelegram(String text) {
-        if (text == null || text.isEmpty()) {
-            return "";
-        }
-        String plain = htmlToPlain(text);
-        plain = plain
-                .replace("**", "")
-                .replace("__", "")
-                .replace("`", "");
-        plain = plain.replaceAll("\\n{3,}", "\n\n");
-        return plain.trim();
-    }
 }

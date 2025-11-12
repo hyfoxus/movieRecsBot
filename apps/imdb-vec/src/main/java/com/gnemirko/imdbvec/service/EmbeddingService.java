@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -21,6 +20,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * EmbeddingService implemented via the local Ollama Embeddings API.
@@ -142,16 +142,35 @@ public class EmbeddingService {
         String title = firstNonBlank(movie.getPrimaryTitle(), movie.getOriginalTitle(), movie.getTconst());
         sb.append(title);
 
-        List<String> tags = buildTags(movie);
-        if (!tags.isEmpty()) {
-            sb.append("\n\nTags: ").append(String.join(", ", tags));
+        String years = describeYears(movie.getStartYear(), movie.getEndYear());
+        if (!years.isBlank()) {
+            sb.append(" (").append(years).append(')');
         }
 
-        List<String> directors = extractDirectorNames(movie);
-        if (!directors.isEmpty()) {
-            sb.append("\n\nDirectors: ").append(String.join(", ", directors));
+        List<String> details = new ArrayList<>();
+        String[] genres = movie.getGenres();
+        if (genres != null && genres.length > 0) {
+            String genreText = Arrays.stream(genres)
+                    .filter(g -> g != null && !g.isBlank())
+                    .distinct()
+                    .collect(Collectors.joining(", "));
+            if (!genreText.isBlank()) {
+                details.add("Genres: " + genreText);
+            }
+        }
+        if (movie.getRuntimeMinutes() != null && movie.getRuntimeMinutes() > 0) {
+            details.add("Runtime: " + movie.getRuntimeMinutes() + " minutes");
+        }
+        if (movie.getIsAdult() != null) {
+            details.add(movie.getIsAdult() ? "Audience: Adults only" : "Audience: All ages");
+        }
+        if (movie.getRating() != null) {
+            details.add("Average rating: " + String.format(Locale.US, "%.1f/10", movie.getRating()));
         }
 
+        if (!details.isEmpty()) {
+            sb.append("\n").append(String.join("; ", details));
+        }
         return sb.toString();
     }
 
@@ -187,52 +206,20 @@ public class EmbeddingService {
         return sb.toString();
     }
 
-    private List<String> buildTags(Movie movie) {
-        List<String> tags = new ArrayList<>();
-        if (movie.getTitleType() != null && !movie.getTitleType().isBlank()) {
-            tags.add("type:" + movie.getTitleType());
+    private String describeYears(Short startYear, Short endYear) {
+        if (startYear == null && endYear == null) {
+            return "";
         }
-        if (movie.getGenres() != null) {
-            Arrays.stream(movie.getGenres())
-                    .filter(g -> g != null && !g.isBlank())
-                    .map(g -> "genre:" + g)
-                    .forEach(tags::add);
+        if (startYear != null && Objects.equals(startYear, endYear)) {
+            return Short.toString(startYear);
         }
-        if (movie.getStartYear() != null) {
-            tags.add("year:" + movie.getStartYear());
+        if (startYear != null && endYear != null) {
+            return startYear + "-" + endYear;
         }
-        if (movie.getRuntimeMinutes() != null && movie.getRuntimeMinutes() > 0) {
-            tags.add("runtime:" + movie.getRuntimeMinutes() + "m");
+        if (startYear != null) {
+            return "since " + startYear;
         }
-        if (movie.getRating() != null) {
-            tags.add("rating:" + String.format(Locale.US, "%.1f", movie.getRating()));
-        }
-        if (movie.getVotes() != null && movie.getVotes() > 0) {
-            tags.add("votes:" + movie.getVotes());
-        }
-        return tags;
-    }
-
-    private List<String> extractDirectorNames(Movie movie) {
-        if (movie.getDirectors() == null || movie.getDirectors().isEmpty()) {
-            return List.of();
-        }
-        LinkedHashSet<String> names = new LinkedHashSet<>();
-        for (Map<String, Object> director : movie.getDirectors()) {
-            if (director == null) continue;
-            Object rawName = director.get("name");
-            String name = rawName instanceof String s ? s.trim() : null;
-            if (name == null || name.isEmpty()) {
-                Object rawId = director.get("nconst");
-                if (rawId instanceof String s && !s.isBlank()) {
-                    name = s.trim();
-                }
-            }
-            if (name != null && !name.isEmpty()) {
-                names.add(name);
-            }
-        }
-        return List.copyOf(names);
+        return "ended " + endYear;
     }
 
     private String firstNonBlank(String... values) {

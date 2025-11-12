@@ -25,6 +25,9 @@ public class WebhookController {
                 return null;
             }
 
+            log.info("Webhook update received: id={}, hasMessage={}, hasCallback={}",
+                    update.getUpdateId(), update.hasMessage(), update.hasCallbackQuery());
+
             log.debug("Received update id={}, hasMessage={}, hasCallbackQuery={}",
                     update.getUpdateId(), update.hasMessage(), update.hasCallbackQuery());
 
@@ -36,9 +39,9 @@ public class WebhookController {
 
             BotApiMethod<?> response = router.handle(update);
             if (response == null) {
-                log.debug("No response to send for update id={}", update.getUpdateId());
+                log.info("No response generated for update id={}", update.getUpdateId());
             } else {
-                log.debug("Prepared response for update id={}", update.getUpdateId());
+                log.info("Prepared response for update id={}", update.getUpdateId());
             }
             return response;
         } catch (Exception e) {

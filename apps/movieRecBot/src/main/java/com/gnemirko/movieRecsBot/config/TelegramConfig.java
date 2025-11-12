@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -11,6 +12,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "telegram.bot.enable-webhook", havingValue = "true", matchIfMissing = true)
 public class TelegramConfig {
 
     @Value("${telegram.bot.webhook-url:}")
@@ -24,10 +26,15 @@ public class TelegramConfig {
 
     @PostConstruct
     public void init() {
+        if (botToken == null || botToken.isBlank()) {
+            log.error("Telegram bot token is missing. Set TELEGRAM_BOT_TOKEN before starting the bot.");
+            throw new IllegalStateException("Telegram bot token is missing");
+        }
+
         String url = buildWebhookUrl(webhookUrl, webhookPath);
         if (url == null) {
-            log.warn("Telegram webhook URL is not configured. Set TELEGRAM_WEBHOOK_URL to enable updates.");
-            return;
+            log.error("Telegram webhook URL is not configured. Set TELEGRAM_WEBHOOK_URL to enable updates.");
+            throw new IllegalStateException("Telegram webhook URL is not configured");
         }
 
         try {

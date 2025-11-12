@@ -1,0 +1,3 @@
+ALTER TABLE movie
+    DROP COLUMN IF EXISTS akas,
+    DROP COLUMN IF EXISTS episode;

@@ -65,7 +65,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <version>${lombok.version}</version>
         </dependency>
 
         <dependency>
@@ -82,6 +82,11 @@
                     <artifactId>mockito-junit-jupiter</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.github.pemistahl</groupId>
+            <artifactId>lingua</artifactId>
+            <version>1.2.2</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
@@ -106,6 +111,16 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <fork>true</fork>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
             </plugin>
 
             <plugin>

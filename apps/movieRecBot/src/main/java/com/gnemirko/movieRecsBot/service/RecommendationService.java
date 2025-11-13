@@ -14,6 +14,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.escapeHtml;
@@ -33,44 +34,64 @@ public class RecommendationService {
     private final UserProfileService userProfileService;
     private final MovieContextService movieContextService;
 
-    private static final String SYSTEM = """
-            Ты — MovieMate, помощник по рекомендациям фильмов.
-            
-            ПРАВИЛА:
-            1) Разрешено задать максимум ДВА уточняющих вопроса за весь диалог. Если пользователь просит «дай рекомендации» или «не задавай вопросы» — сразу выдай рекомендации.
-            2) Если данных мало — сделай разумные предположения (современные, не детские, язык любой) и выдай рекомендации.
-            3) Не повторяй вопросы. Не задавай вопросы после явного запроса рекомендаций.
-            4) Всегда соблюдай жанровые и анти-предпочтения пользователя. Если запросил фэнтези — не предлагай нефэнтези.
-            5) Краткость: 3–5 фильмов, для каждого — 1 короткое объяснение, почему подходит.
-            6) Для ответа используй тот же язык, что использовал в последнем сообщении пользователь.
-            7) Если пользователь просто здоровается или говорит не по делу — ответь дружелюбно, напомни, что ты подбираешь фильмы, и мягко уточни, что он хочет посмотреть.
-            8) Всегда держи разговор в кинотеме: обсуждай жанры, настроение, актёров, недавние просмотры и т.п., чтобы лучше понять запрос.
-            9) Не лги о параметрах фильма: не лги о актерах, не лги о годе выпуска, не лги о жанрах.Wu
-            
-            ФОРМАТ ДЛЯ TELEGRAM (HTML):
-            - Вступление — одна строка.
-            - Далее пронумерованный список.
-            - Название и год выделяй жирным: <br>Название (Год)</br>.
-            - Без ссылок и кода. Минимум спецсимволов.
+    private static final String BASE_SYSTEM = """
+            You are MovieMate, a movie recommendation assistant.
+
+            RULES:
+            1) Ask at most TWO clarifying questions per conversation. If the user explicitly says “give recommendations” or “no questions” — go straight to recommendations.
+            2) When the info is scarce, make reasonable assumptions (modern, not kids content, any language) and still respond with recommendations.
+            3) Do not repeat questions and never ask another question after the user requests recommendations.
+            4) Always honor the user’s genre preferences and block lists.
+            5) Keep it short: 3–5 movies, each with one concise reason it fits.
+            6) Stay on the movie topic (genres, vibe, actors, recent watches) to understand the request better.
+            7) Be honest about metadata: never make up cast, release year, or genre details.
+
+            FORMAT FOR TELEGRAM (HTML):
+            - Start with a one-line intro.
+            - Then provide a numbered list.
+            - Emphasize title and year in bold: <b>Title (Year)</b>.
+            - No links, code blocks, or unnecessary symbols.
             """;
+
+    private static final String ASK_OR_RECOMMEND_PROMPT = """
+            If you already have enough information to recommend, reply with exactly "__RECOMMEND__".
+            Otherwise ask exactly one new clarifying question with no preface and no numbering.
+            """;
+
+    private static final String JSON_RESPONSE_PROMPT = """
+            Return ONLY JSON with this structure:
+            {
+              "intro": "short intro",
+              "movies": [
+                {"title":"...", "year":1999, "reason":"...", "genres":["Fantasy","..."]}
+              ]
+            }
+            Strictly 3–5 movies. Obey all user genre preferences and block lists.
+            """;
+
+    private static final String NO_MATCH_TEMPLATE = "I couldn’t find a good match. Share 1–2 favorites and I’ll suggest something similar.";
+    private static final String REMINDER_TEMPLATE = "When you watch something, send /watched with your thoughts so I can improve.";
+
+    private final Map<String, String> helperTranslations = new ConcurrentHashMap<>();
 
     public String reply(long chatId, String userText) {
         UserProfile profile = userProfileService.getOrCreate(chatId);
+        UserLanguage language = UserLanguage.detect(userText);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
         String movieContext = movieContextService.buildContextBlock(userText, profileSummary, profile);
         boolean force = dialogPolicy.recommendNow(chatId, userText);
         String out;
         if (force) {
-            out = renderRecommendations(history, userText, profileSummary, movieContext, profile);
+            out = renderRecommendations(history, userText, profileSummary, movieContext, profile, language);
             dialogPolicy.reset(chatId);
-            out = appendOpinionReminder(out);
+            out = appendOpinionReminder(out, language);
         } else {
-            String next = stripCodeFence(askOneQuestionOrRecommend(history, userText, profileSummary, movieContext)).trim();
+            String next = stripCodeFence(askOneQuestionOrRecommend(history, userText, profileSummary, movieContext, language)).trim();
             if ("__RECOMMEND__".equalsIgnoreCase(next)) {
-                out = renderRecommendations(history, userText, profileSummary, movieContext, profile);
+                out = renderRecommendations(history, userText, profileSummary, movieContext, profile, language);
                 dialogPolicy.reset(chatId);
-                out = appendOpinionReminder(out);
+                out = appendOpinionReminder(out, language);
             } else {
                 dialogPolicy.countClarifying(chatId);
                 out = sanitize(next);
@@ -81,14 +102,14 @@ public class RecommendationService {
         return out;
     }
 
-    private String askOneQuestionOrRecommend(String history, String userText, String profileSummary, String movieContext) {
+    private String askOneQuestionOrRecommend(String history,
+                                             String userText,
+                                             String profileSummary,
+                                             String movieContext,
+                                             UserLanguage language) {
         return chatClient
                 .prompt()
-                .system(SYSTEM + """
-                        
-                        Если информации достаточно — ответь ровно строкой "__RECOMMEND__".
-                        Иначе задай ОДИН новый, неповторяющийся вопрос, без предисловий и без нумерации.
-                        """)
+                .system(buildSystemPrompt(language, userText, ASK_OR_RECOMMEND_PROMPT))
                 .user(enrich(history, userText, profileSummary, movieContext))
                 .call()
                 .content();
@@ -98,21 +119,11 @@ public class RecommendationService {
                                          String userText,
                                          String profileSummary,
                                          String movieContext,
-                                         UserProfile profile) {
+                                         UserProfile profile,
+                                         UserLanguage language) {
         String raw = chatClient
                 .prompt()
-                .system(SYSTEM + """
-                        
-                        Сейчас верни ТОЛЬКО JSON без текста вокруг строго вида:
-                        {
-                          "intro": "краткое вступление",
-                          "movies": [
-                            {"title":"...", "year":1999, "reason":"...", "genres":["Fantasy","..."]},
-                            ...
-                          ]
-                        }
-                        Строго 3–5 фильмов. Следуй жанровым и анти-ограничениям пользователя.
-                        """)
+                .system(buildSystemPrompt(language, userText, JSON_RESPONSE_PROMPT))
                 .user(enrich(history, userText, profileSummary, movieContext))
                 .call()
                 .content();
@@ -126,7 +137,7 @@ public class RecommendationService {
 
         Parsed parsed = parseAndFilter(json, profile, userText);
         if (parsed.movies.isEmpty()) {
-            return sanitize("Не нашёл подходящих вариантов. Напишите 1–2 любимых фильма — подберу похожие.");
+            return sanitize(localizedHelperText(NO_MATCH_TEMPLATE, "noMovies", language));
         }
         StringBuilder sb = new StringBuilder();
         if (!isBlank(parsed.intro)) {
@@ -285,10 +296,34 @@ public class RecommendationService {
         return title + " — " + review;
     }
 
-    private String appendOpinionReminder(String text) {
+    private String appendOpinionReminder(String text, UserLanguage language) {
         if (text == null || text.isBlank()) return text;
-        String reminder = "<i>" + escapeHtml("Когда посмотришь фильм, напиши /watched и поделись мнением — я буду точнее.") + "</i>";
+        String reminderText = localizedHelperText(REMINDER_TEMPLATE, "reminder", language);
+        String reminder = "<i>" + escapeHtml(reminderText) + "</i>";
         return scrubMarkdownArtifacts(text) + "\n\n" + reminder;
+    }
+
+    private String buildSystemPrompt(UserLanguage language, String userText, String taskSpecificPrompt) {
+        String directive = language.directive(userText);
+        return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + directive + "\n\n" + taskSpecificPrompt;
+    }
+
+    private String localizedHelperText(String english, String keyPrefix, UserLanguage language) {
+        if (!language.requiresTranslation()) {
+            return english;
+        }
+        String cacheKey = keyPrefix + "|" + language.isoCode();
+        return helperTranslations.computeIfAbsent(cacheKey, k -> translateHelperText(english, language));
+    }
+
+    private String translateHelperText(String english, UserLanguage language) {
+        try {
+            String instruction = "Translate the following helper text into " + language.displayName() + ". Respond with the translation only.";
+            return stripCodeFence(chatClient.prompt().system(instruction).user(english).call().content()).trim();
+        } catch (Exception e) {
+            log.warn("Failed to translate helper text to {}: {}", language.displayName(), e.getMessage());
+            return english;
+        }
     }
 
     private static final class Parsed {

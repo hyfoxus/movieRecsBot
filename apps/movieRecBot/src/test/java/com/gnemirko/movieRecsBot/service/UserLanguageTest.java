@@ -1,5 +1,6 @@
 package com.gnemirko.movieRecsBot.service;
 
+import com.github.pemistahl.lingua.api.Language;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -7,32 +8,31 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UserLanguageTest {
 
     @Test
-    void detectsRussianAndProvidesDirective() {
-        UserLanguage lang = UserLanguage.detect("Подбери что-то наподобие Матрицы");
+    void buildsFromRussianLanguage() {
+        UserLanguage lang = UserLanguage.fromLanguage(Language.RUSSIAN);
         assertThat(lang.isoCode()).isEqualToIgnoringCase("RU");
-        assertThat(lang.directive("Подбери что-то"))
+        assertThat(lang.directive(""))
                 .contains("Russian")
                 .contains("Respond strictly in that language");
     }
 
     @Test
-    void detectsEnglish() {
-        UserLanguage lang = UserLanguage.detect("Recommend a fun movie");
+    void englishDoesNotRequireTranslation() {
+        UserLanguage lang = UserLanguage.fromLanguage(Language.ENGLISH);
         assertThat(lang.requiresTranslation()).isFalse();
     }
 
     @Test
-    void detectsSerbian() {
-        UserLanguage lang = UserLanguage.detect("Preporuči mi neki film");
-        assertThat(lang.isoCode()).isNotBlank();
-        assertThat(lang.isoCode().equalsIgnoreCase("EN")).isFalse();
+    void buildsFromIsoCode() {
+        UserLanguage lang = UserLanguage.fromIsoCode("sr");
+        assertThat(lang.isoCode()).isEqualTo("sr");
         assertThat(lang.requiresTranslation()).isTrue();
     }
 
     @Test
-    void defaultsToEnglishWhenUnknown() {
-        UserLanguage lang = UserLanguage.detect("123456 !!!");
-        assertThat(lang.isoCode()).isEqualToIgnoringCase("EN");
+    void englishFallback() {
+        UserLanguage lang = UserLanguage.englishFallback();
+        assertThat(lang.isoCode()).isEqualTo("en");
         assertThat(lang.directive(""))
                 .contains("Respond in English");
     }

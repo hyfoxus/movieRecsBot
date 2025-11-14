@@ -33,6 +33,7 @@ public class RecommendationService {
     private final DialogPolicy dialogPolicy;
     private final UserProfileService userProfileService;
     private final MovieContextService movieContextService;
+    private final LanguageDetectionService languageDetectionService;
 
     private static final String BASE_SYSTEM = """
             You are MovieMate, a movie recommendation assistant.
@@ -76,7 +77,7 @@ public class RecommendationService {
 
     public String reply(long chatId, String userText) {
         UserProfile profile = userProfileService.getOrCreate(chatId);
-        UserLanguage language = UserLanguage.detect(userText);
+        UserLanguage language = languageDetectionService.detect(userText);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
         String movieContext = movieContextService.buildContextBlock(userText, profileSummary, profile);

@@ -9,7 +9,8 @@ import org.springframework.test.context.TestPropertySource;
         "telegram.bot.token=test-token",
         "telegram.bot.webhook-url=https://example.com",
         "telegram.bot.enable-webhook=false",
-        "spring.ai.openai.api-key=test-key"
+        "spring.ai.openai.api-key=test-key",
+        "app.language.llm.enabled=false"
 })
 class MovieRecsBotApplicationTests {
 

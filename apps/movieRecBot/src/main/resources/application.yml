@@ -26,3 +26,9 @@ app:
   mcp:
     base-url: ${MCP_BASE_URL:http://imdb-mcp:8082}
     timeout-ms: ${MCP_TIMEOUT_MS:4000}
+  language:
+    llm:
+      enabled: ${LANG_DETECT_LLM_ENABLED:true}
+      base-url: ${LANG_DETECT_LLM_URL:http://imdb-ollama:11434}
+      model: ${LANG_DETECT_LLM_MODEL:llama3.2}
+      timeout-ms: ${LANG_DETECT_LLM_TIMEOUT_MS:2000}

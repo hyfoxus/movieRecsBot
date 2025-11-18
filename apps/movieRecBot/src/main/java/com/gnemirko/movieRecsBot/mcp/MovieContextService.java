@@ -1,13 +1,16 @@
 package com.gnemirko.movieRecsBot.mcp;
 
 import com.gnemirko.movieRecsBot.entity.UserProfile;
+import com.gnemirko.movieRecsBot.service.UserLanguage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -17,9 +20,13 @@ public class MovieContextService {
 
     private final McpClient mcpClient;
 
-    public String buildContextBlock(String userQuery, String profileSummary, UserProfile profile) {
+    public ContextBlock buildContextBlock(String userQuery,
+                                          String profileSummary,
+                                          UserProfile profile,
+                                          UserLanguage language,
+                                          List<String> actorFilters) {
         if (profile == null) {
-            return "";
+            return ContextBlock.empty();
         }
         String query = userQuery == null ? "" : userQuery.trim();
         if (profileSummary != null && !profileSummary.isBlank()) {
@@ -34,52 +41,93 @@ public class MovieContextService {
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
 
-        List<MovieContextItem> items = mcpClient.search(query, includeGenres, excludeGenres, 5);
+        List<MovieContextItem> items = mcpClient.search(query, includeGenres, excludeGenres, actorFilters, 5);
         if (items.isEmpty()) {
-            return "";
+            return ContextBlock.empty();
         }
 
         StringBuilder block = new StringBuilder();
-        block.append("Кандидаты из базы IMDb:\n");
+        String header = contextHeader(language);
+        if (!header.isBlank()) {
+            block.append(header).append("\n");
+        }
         int idx = 1;
         for (MovieContextItem item : items) {
-            block.append(idx++).append(". ")
-                    .append(formatTitle(item))
-                    .append(" | близость: ").append(formatSimilarity(item.similarity()));
-            if (item.rating() != null) {
-                block.append(" | рейтинг: ").append(String.format(Locale.US, "%.1f", item.rating()));
-            }
-            if (item.genres() != null && !item.genres().isEmpty()) {
-                block.append(" | жанры: ").append(String.join(", ", item.genres()));
-            }
-            Object plot = item.metadata() == null ? null : item.metadata().get("plot");
-            if (plot instanceof String plotText && !plotText.isBlank()) {
-                block.append(" | сюжет: ").append(plotText.trim());
-            }
-            block.append("\n");
+            block.append(formatCatalogEntry(idx++, item)).append("\n");
         }
-        return block.toString().trim();
+        return new ContextBlock(block.toString().trim(), items);
     }
 
-    private String formatTitle(MovieContextItem item) {
-        StringBuilder title = new StringBuilder();
-        if (item.title() != null) {
-            title.append(item.title());
+    public Optional<MovieContextItem> lookupByTitle(String title) {
+        if (title == null || title.isBlank()) {
+            return Optional.empty();
         }
-        if (item.year() != null) {
-            title.append(" (").append(item.year()).append(")");
+        try {
+            List<MovieContextItem> matches = mcpClient.search(title.trim(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), 1);
+            if (matches.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(matches.get(0));
+        } catch (Exception ex) {
+            log.warn("Failed to look up movie '{}' via MCP: {}", title, ex.getMessage());
+            return Optional.empty();
         }
-        if (title.isEmpty() && item.tconst() != null) {
-            title.append(item.tconst());
-        }
-        return title.toString();
     }
 
-    private String formatSimilarity(double similarity) {
+    private String contextHeader(UserLanguage language) {
+        if (language != null && "ru".equalsIgnoreCase(language.isoCode())) {
+            return "CATALOG FACTS (копируй названия и годы строго из списка ниже, не выдумывай годы):";
+        }
+        return "CATALOG FACTS (copy exact title/year from this list; never invent years):";
+    }
+
+    static String formatCatalogEntry(int index, MovieContextItem item) {
+        StringBuilder entry = new StringBuilder();
+        entry.append(index).append(") Title: ").append(nvl(item.title(), item.tconst()));
+        entry.append(" | Year: ").append(item.year() == null ? "unknown" : item.year());
+        if (item.rating() != null) {
+            entry.append(" | Rating: ").append(String.format(Locale.US, "%.1f", item.rating()));
+        }
+        if (item.genres() != null && !item.genres().isEmpty()) {
+            entry.append(" | Genres: ").append(String.join(", ", item.genres()));
+        }
+        if (item.actors() != null && !item.actors().isEmpty()) {
+            String actors = item.actors().stream()
+                    .map(person -> person == null ? "" : person.name())
+                    .filter(name -> name != null && !name.isBlank())
+                    .limit(5)
+                    .collect(Collectors.joining(", "));
+            if (!actors.isBlank()) {
+                entry.append(" | Actors: ").append(actors);
+            }
+        }
+        Object plot = item.metadata() == null ? null : item.metadata().get("plot");
+        if (plot instanceof String plotText && !plotText.isBlank()) {
+            entry.append(" | Plot: ").append(plotText.trim());
+        }
+        entry.append(" | Similarity: ").append(formatSimilarity(item.similarity()));
+        entry.append(" | IMDb ID: ").append(item.tconst() == null ? "unknown" : item.tconst());
+        return entry.toString();
+    }
+
+    private static String formatSimilarity(double similarity) {
         if (similarity <= 0) {
             return "0.00";
         }
         double capped = Math.min(similarity, 0.999);
         return String.format(Locale.US, "%.2f", capped);
+    }
+
+    private static String nvl(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback == null ? "" : fallback;
+    }
+
+    public record ContextBlock(String block, List<MovieContextItem> items) {
+        public static ContextBlock empty() {
+            return new ContextBlock("", List.of());
+        }
     }
 }

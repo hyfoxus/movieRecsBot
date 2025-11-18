@@ -1,6 +1,5 @@
 package com.gnemirko.movieRecsBot.service;
 
-import com.github.pemistahl.lingua.api.Language;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -8,9 +7,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UserLanguageTest {
 
     @Test
-    void buildsFromRussianLanguage() {
-        UserLanguage lang = UserLanguage.fromLanguage(Language.RUSSIAN);
-        assertThat(lang.isoCode()).isEqualToIgnoringCase("RU");
+    void buildsFromIsoCodeWithDisplayName() {
+        UserLanguage lang = UserLanguage.fromIsoCode("ru", "Russian");
+        assertThat(lang.isoCode()).isEqualToIgnoringCase("ru");
         assertThat(lang.directive(""))
                 .contains("Russian")
                 .contains("Respond strictly in that language");
@@ -18,15 +17,8 @@ class UserLanguageTest {
 
     @Test
     void englishDoesNotRequireTranslation() {
-        UserLanguage lang = UserLanguage.fromLanguage(Language.ENGLISH);
+        UserLanguage lang = UserLanguage.fromIsoCode("en");
         assertThat(lang.requiresTranslation()).isFalse();
-    }
-
-    @Test
-    void buildsFromIsoCode() {
-        UserLanguage lang = UserLanguage.fromIsoCode("sr");
-        assertThat(lang.isoCode()).isEqualTo("sr");
-        assertThat(lang.requiresTranslation()).isTrue();
     }
 
     @Test

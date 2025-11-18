@@ -29,9 +29,7 @@ public class BootstrapService {
         this.skipEmbeddingsOnError = skipEmbeddingsOnError;
     }
 
-    /**
-     * Kick off a full refresh asynchronously.
-     */
+
     @Async
     public CompletableFuture<Void> runFullBootstrap(boolean rebuildIndex) {
         var future = new CompletableFuture<Void>();

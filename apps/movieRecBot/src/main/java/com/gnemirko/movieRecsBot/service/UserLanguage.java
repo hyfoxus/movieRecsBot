@@ -1,15 +1,11 @@
 package com.gnemirko.movieRecsBot.service;
 
-import com.github.pemistahl.lingua.api.IsoCode639_1;
-import com.github.pemistahl.lingua.api.IsoCode639_3;
-import com.github.pemistahl.lingua.api.Language;
-
 import java.util.Locale;
 
 /**
  * Value object that describes the language we expect the LLM to answer in.
  */
-final class UserLanguage {
+public final class UserLanguage {
 
     private final String isoCode;
     private final String displayName;
@@ -25,24 +21,18 @@ final class UserLanguage {
         this.detected = detected;
     }
 
-    static UserLanguage fromLanguage(Language language) {
-        if (language == null || language == Language.UNKNOWN) {
-            return englishFallback();
-        }
-        String iso = resolveIso(language);
-        return new UserLanguage(iso, toDisplayName(language), true);
+    static UserLanguage fromIsoCode(String isoCode) {
+        return fromIsoCode(isoCode, null);
     }
 
-    static UserLanguage fromIsoCode(String isoCode) {
+    static UserLanguage fromIsoCode(String isoCode, String displayName) {
         if (isoCode == null || isoCode.isBlank()) {
             return englishFallback();
         }
-        Locale locale = Locale.forLanguageTag(isoCode);
-        String display = locale.getDisplayLanguage(Locale.ENGLISH);
-        if (display == null || display.isBlank()) {
-            display = isoCode.toUpperCase(Locale.ROOT);
-        }
-        return new UserLanguage(isoCode, display, true);
+        String name = (displayName == null || displayName.isBlank())
+                ? defaultDisplayName(isoCode)
+                : displayName;
+        return new UserLanguage(isoCode, name, true);
     }
 
     static UserLanguage englishFallback() {
@@ -60,26 +50,12 @@ final class UserLanguage {
         return !"en".equalsIgnoreCase(isoCode);
     }
 
-    String isoCode() {
+    public String isoCode() {
         return isoCode;
     }
 
-    String displayName() {
+    public String displayName() {
         return displayName;
-    }
-
-    private static String resolveIso(Language language) {
-        IsoCode639_1 iso6391 = language.getIsoCode639_1();
-        if (iso6391 != null) {
-            return iso6391.name();
-        }
-        IsoCode639_3 iso6393 = language.getIsoCode639_3();
-        return iso6393 != null ? iso6393.name() : "und";
-    }
-
-    private static String toDisplayName(Language language) {
-        String name = language.toString().toLowerCase(Locale.ROOT).replace('_', ' ');
-        return name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
     }
 
     private static String defaultDisplayName(String iso) {

@@ -24,6 +24,7 @@ public class ImdbCopyLoader {
               COALESCE(NULLIF(r.num_votes, '\\N')::bigint, 0) DESC,
               b.tconst
             """;
+    private static final String TITLE_TYPE_WHERE = "LOWER(NULLIF(b.title_type, '\\\\N')) IN ('movie','tvmovie')";
 
     private final DataSource dataSource;
 
@@ -56,11 +57,24 @@ public class ImdbCopyLoader {
                 FROM STDIN WITH (FORMAT text)
                 """);
 
+            copyFile(connection, files.nameBasics(), """
+                COPY tmp_name_basics
+                  (nconst, primary_name, birth_year, death_year, primary_profession, known_for_titles)
+                FROM STDIN WITH (FORMAT text)
+                """);
+
+            copyFile(connection, files.titlePrincipals(), """
+                COPY tmp_title_principals
+                  (tconst, ordering, nconst, category, job, characters)
+                FROM STDIN WITH (FORMAT text)
+                """);
+
             createSelectedTitles(statement, maxTitles);
 
             populateRankedTitles(statement, maxTitles);
             long affected = upsertMovies(statement);
             deleteMissingMovies(statement);
+            syncPrincipals(statement);
 
             try (ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM tmp_ranked_titles")) {
                 if (rs.next()) {
@@ -94,6 +108,28 @@ public class ImdbCopyLoader {
             ) ON COMMIT DROP
             """);
 
+        statement.execute("""
+            CREATE TEMP TABLE tmp_name_basics (
+              nconst             text,
+              primary_name       text,
+              birth_year         text,
+              death_year         text,
+              primary_profession text,
+              known_for_titles   text
+            ) ON COMMIT DROP
+            """);
+
+        statement.execute("""
+            CREATE TEMP TABLE tmp_title_principals (
+              tconst     text,
+              ordering   text,
+              nconst     text,
+              category   text,
+              job        text,
+              characters text
+            ) ON COMMIT DROP
+            """);
+
     }
 
     private void createSelectedTitles(java.sql.Statement statement, int maxTitles) throws SQLException {
@@ -110,9 +146,10 @@ public class ImdbCopyLoader {
                 ) AS rn
               FROM tmp_title_basics b
               LEFT JOIN tmp_title_ratings r ON r.tconst = b.tconst
+              WHERE %s
             ) ranked
             %s
-            """.formatted(RANKING_ORDER, selectionFilter));
+            """.formatted(RANKING_ORDER, TITLE_TYPE_WHERE, selectionFilter));
         statement.execute("CREATE INDEX tmp_selected_titles_tconst_idx ON tmp_selected_titles (tconst)");
     }
 
@@ -206,6 +243,88 @@ public class ImdbCopyLoader {
             """);
     }
 
+    private void syncPrincipals(java.sql.Statement statement) throws SQLException {
+        statement.execute("""
+            CREATE TEMP TABLE tmp_filtered_principals ON COMMIT DROP AS
+            SELECT DISTINCT ON (p.tconst, clean.nconst, clean.category)
+              p.tconst,
+              clean.nconst,
+              clean.category,
+              clean.ordering,
+              clean.job,
+              clean.characters
+            FROM tmp_title_principals p
+            JOIN tmp_selected_titles st ON st.tconst = p.tconst
+            CROSS JOIN LATERAL (
+              SELECT
+                NULLIF(p.nconst, '\\N') AS nconst,
+                LOWER(NULLIF(p.category, '\\N')) AS category,
+                CASE
+                  WHEN p.ordering IS NULL OR p.ordering = '\\N' THEN NULL
+                  WHEN p.ordering ~ '^\\d+$' THEN p.ordering::integer
+                  ELSE NULL
+                END AS ordering,
+                NULLIF(p.job, '\\N') AS job,
+                NULLIF(p.characters, '\\N') AS characters
+            ) AS clean
+            WHERE clean.nconst IS NOT NULL
+              AND clean.category IN ('actor', 'actress', 'director', 'writer')
+            ORDER BY p.tconst, clean.nconst, clean.category, clean.ordering NULLS LAST
+            """);
+
+        statement.execute("""
+            CREATE TEMP TABLE tmp_filtered_people ON COMMIT DROP AS
+            SELECT DISTINCT
+              fp.nconst,
+              COALESCE(NULLIF(nb.primary_name, '\\N'), fp.nconst) AS primary_name
+            FROM tmp_filtered_principals fp
+            LEFT JOIN tmp_name_basics nb ON nb.nconst = fp.nconst
+            WHERE fp.nconst IS NOT NULL
+            """);
+
+        statement.execute("""
+            INSERT INTO person (nconst, primary_name)
+            SELECT nconst, primary_name
+            FROM tmp_filtered_people
+            ON CONFLICT (nconst) DO UPDATE
+              SET primary_name = EXCLUDED.primary_name
+            """);
+
+        statement.execute("""
+            CREATE TEMP TABLE tmp_person_ids ON COMMIT DROP AS
+            SELECT p.id, p.nconst
+            FROM person p
+            JOIN tmp_filtered_people fp ON fp.nconst = p.nconst
+            """);
+
+        statement.execute("""
+            CREATE TEMP TABLE tmp_movie_ids ON COMMIT DROP AS
+            SELECT id, tconst
+            FROM movie
+            WHERE tconst IN (SELECT tconst FROM tmp_selected_titles)
+            """);
+
+        statement.execute("""
+            DELETE FROM movie_principal mp
+            USING tmp_movie_ids mi
+            WHERE mp.movie_id = mi.id
+            """);
+
+        statement.execute("""
+            INSERT INTO movie_principal (movie_id, person_id, category, ordering, job, characters)
+            SELECT DISTINCT
+              mi.id,
+              pi.id,
+              fp.category,
+              fp.ordering,
+              fp.job,
+              fp.characters
+            FROM tmp_filtered_principals fp
+            JOIN tmp_movie_ids mi ON mi.tconst = fp.tconst
+            JOIN tmp_person_ids pi ON pi.nconst = fp.nconst
+            """);
+    }
+
     private void skipHeaderLine(InputStream in) throws Exception {
         int b;
         boolean sawCR = false;
@@ -228,7 +347,9 @@ public class ImdbCopyLoader {
 
     public record ImdbFiles(
             Path titleBasics,
-            Path titleRatings
+            Path titleRatings,
+            Path nameBasics,
+            Path titlePrincipals
     ) {
         public static Builder builder() {
             return new Builder();
@@ -237,6 +358,8 @@ public class ImdbCopyLoader {
         public static final class Builder {
             private Path titleBasics;
             private Path titleRatings;
+            private Path nameBasics;
+            private Path titlePrincipals;
             private Builder() {}
 
             public Builder titleBasics(Path path) {
@@ -249,10 +372,22 @@ public class ImdbCopyLoader {
                 return this;
             }
 
+            public Builder nameBasics(Path path) {
+                this.nameBasics = path;
+                return this;
+            }
+
+            public Builder titlePrincipals(Path path) {
+                this.titlePrincipals = path;
+                return this;
+            }
+
             public ImdbFiles build() {
                 return new ImdbFiles(
                         Objects.requireNonNull(titleBasics, "titleBasics file is required"),
-                        Objects.requireNonNull(titleRatings, "titleRatings file is required")
+                        Objects.requireNonNull(titleRatings, "titleRatings file is required"),
+                        Objects.requireNonNull(nameBasics, "nameBasics file is required"),
+                        Objects.requireNonNull(titlePrincipals, "titlePrincipals file is required")
                 );
             }
         }

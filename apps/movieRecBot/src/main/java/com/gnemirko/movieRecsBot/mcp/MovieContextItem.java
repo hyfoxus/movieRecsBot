@@ -14,6 +14,10 @@ public record MovieContextItem(
         Integer votes,
         double similarity,
         List<String> genres,
+        List<Person> actors,
         Map<String, Object> metadata
 ) {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Person(String id, String name) {}
 }

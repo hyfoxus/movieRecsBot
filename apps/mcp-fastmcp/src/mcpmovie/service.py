@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, TEXT
 from mcpmovie.config import get_settings
 from mcpmovie.database import session_scope
 from mcpmovie.embeddings import embed_text
-from mcpmovie.schemas import MovieContext, SearchRequest
+from mcpmovie.schemas import MovieContext, SearchRequest, ActorInfo
 
 settings = get_settings()
 
@@ -20,7 +20,10 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
     embedding = await embed_text(request.query)
     vec_literal = _vector_literal(embedding)
 
-    where_clauses = ["m.embedding IS NOT NULL"]
+    where_clauses = [
+        "m.embedding IS NOT NULL",
+        "LOWER(m.title_type) IN ('movie','tvmovie')"
+    ]
     params = {"vec": vec_literal, "limit": limit}
 
     if request.from_year is not None:
@@ -48,6 +51,22 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
         )
         params["excGenres"] = exc_genres
 
+    actor_filters = [name.lower() for name in (request.actors or []) if name]
+    if actor_filters:
+        where_clauses.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM movie_principal mp
+              JOIN person p ON p.id = mp.person_id
+              WHERE mp.movie_id = m.id
+                AND mp.category IN ('actor','actress')
+                AND LOWER(p.primary_name) = ANY(:actorFilters)
+            )
+            """
+        )
+        params["actorFilters"] = actor_filters
+
     where_sql = " AND ".join(where_clauses)
 
     sql = text(
@@ -58,11 +77,31 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
             FROM movie m
             WHERE {where_sql}
         )
-        SELECT tconst, primary_title, start_year, rating, votes, genres, plot,
-               title_type,
-               runtime_minutes, is_adult,
-               (1 - (embedding <=> CAST(:vec AS vector))) AS similarity
+        SELECT filtered.tconst,
+               filtered.primary_title,
+               filtered.start_year,
+               filtered.rating,
+               filtered.votes,
+               filtered.genres,
+               filtered.plot,
+               filtered.title_type,
+               filtered.runtime_minutes,
+               filtered.is_adult,
+               (1 - (embedding <=> CAST(:vec AS vector))) AS similarity,
+               actors.actor_list
         FROM filtered
+        LEFT JOIN LATERAL (
+            SELECT json_agg(obj) AS actor_list
+            FROM (
+                SELECT json_build_object('id', p.nconst, 'name', p.primary_name) AS obj
+                FROM movie_principal mp
+                JOIN person p ON p.id = mp.person_id
+                WHERE mp.movie_id = filtered.id
+                  AND mp.category IN ('actor','actress')
+                ORDER BY mp.ordering NULLS LAST, p.primary_name
+                LIMIT 5
+            ) actor_rows
+        ) actors ON TRUE
         ORDER BY similarity DESC
         LIMIT :limit
         """
@@ -79,6 +118,12 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
             "runtimeMinutes": row.get("runtime_minutes"),
             "isAdult": row.get("is_adult"),
         }
+        actor_payload = row.get("actor_list") or []
+        actors = [
+            ActorInfo(id=str(actor["id"]), name=actor["name"])
+            for actor in actor_payload
+            if actor and actor.get("id") and actor.get("name")
+        ]
         contexts.append(
             MovieContext(
                 tconst=row["tconst"],
@@ -88,6 +133,7 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
                 votes=row.get("votes"),
                 similarity=row["similarity"],
                 genres=[g for g in (row.get("genres") or []) if g],
+                actors=actors,
                 metadata={k: v for k, v in metadata.items() if v is not None},
             )
         )
@@ -97,11 +143,25 @@ async def search_movies(request: SearchRequest) -> List[MovieContext]:
 def fetch_movie(tconst: str) -> Optional[MovieContext]:
     sql = text(
         """
-        SELECT tconst, primary_title, start_year, rating, votes, genres, plot,
-               title_type,
-               runtime_minutes, is_adult
-        FROM movie
-        WHERE tconst = :tconst
+        SELECT m.tconst, m.primary_title, m.start_year, m.rating, m.votes, m.genres,
+               m.plot,
+               m.title_type,
+               m.runtime_minutes, m.is_adult,
+               actors.actor_list
+        FROM movie m
+        LEFT JOIN LATERAL (
+            SELECT json_agg(obj) AS actor_list
+            FROM (
+                SELECT json_build_object('id', p.nconst, 'name', p.primary_name) AS obj
+                FROM movie_principal mp
+                JOIN person p ON p.id = mp.person_id
+                WHERE mp.movie_id = m.id
+                  AND mp.category IN ('actor','actress')
+                ORDER BY mp.ordering NULLS LAST, p.primary_name
+                LIMIT 5
+            ) actor_rows
+        ) actors ON TRUE
+        WHERE m.tconst = :tconst
         """
     )
     with session_scope() as session:
@@ -114,6 +174,12 @@ def fetch_movie(tconst: str) -> Optional[MovieContext]:
         "runtimeMinutes": row.get("runtime_minutes"),
         "isAdult": row.get("is_adult"),
     }
+    actor_payload = row.get("actor_list") or []
+    actors = [
+        ActorInfo(id=str(actor["id"]), name=actor["name"])
+        for actor in actor_payload
+        if actor and actor.get("id") and actor.get("name")
+    ]
     return MovieContext(
         tconst=row["tconst"],
         title=row["primary_title"],
@@ -122,5 +188,6 @@ def fetch_movie(tconst: str) -> Optional[MovieContext]:
         votes=row.get("votes"),
         similarity=1.0,
         genres=[g for g in (row.get("genres") or []) if g],
+        actors=actors,
         metadata={k: v for k, v in metadata.items() if v is not None},
     )

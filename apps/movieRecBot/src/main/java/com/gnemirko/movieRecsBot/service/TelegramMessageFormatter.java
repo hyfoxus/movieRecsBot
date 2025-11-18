@@ -1,6 +1,14 @@
 package com.gnemirko.movieRecsBot.service;
 
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 public final class TelegramMessageFormatter {
+
+    private static final Pattern BASIC_ALLOWED_TAG =
+            Pattern.compile("(?i)&lt;(/?)(b|i|u|s|code)&gt;");
+    private static final Pattern BREAK_TAG = Pattern.compile("(?i)&lt;br\\s*/?&gt;");
 
     private TelegramMessageFormatter() {
     }
@@ -15,6 +23,19 @@ public final class TelegramMessageFormatter {
         }
         String escaped = escapeHtml(unfenced);
         return scrubMarkdownArtifacts(escaped).trim();
+    }
+
+    public static String sanitizeAllowBasicHtml(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String unfenced = stripCodeFence(raw).trim();
+        if (unfenced.isEmpty()) {
+            return "";
+        }
+        String scrubbed = scrubMarkdownArtifacts(unfenced);
+        String escaped = escapeHtml(scrubbed);
+        return restoreAllowedHtmlTags(escaped).trim();
     }
 
     public static String stripCodeFence(String text) {
@@ -74,5 +95,18 @@ public final class TelegramMessageFormatter {
             }
         }
         return out.toString();
+    }
+
+    private static String restoreAllowedHtmlTags(String escaped) {
+        Matcher basic = BASIC_ALLOWED_TAG.matcher(escaped);
+        StringBuffer sb = new StringBuffer();
+        while (basic.find()) {
+            String slash = basic.group(1) == null ? "" : basic.group(1);
+            String tag = basic.group(2).toLowerCase(Locale.ROOT);
+            String replacement = "<" + slash + tag + ">";
+            basic.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        basic.appendTail(sb);
+        return BREAK_TAG.matcher(sb.toString()).replaceAll("<br/>");
     }
 }

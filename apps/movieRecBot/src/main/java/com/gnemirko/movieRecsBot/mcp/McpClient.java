@@ -40,6 +40,7 @@ public class McpClient {
     public List<MovieContextItem> search(String query,
                                          List<String> includeGenres,
                                          List<String> excludeGenres,
+                                         List<String> actorFilters,
                                          int limit) {
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("query", query);
@@ -49,6 +50,9 @@ public class McpClient {
         }
         if (excludeGenres != null && !excludeGenres.isEmpty()) {
             arguments.put("excludeGenres", excludeGenres);
+        }
+        if (actorFilters != null && !actorFilters.isEmpty()) {
+            arguments.put("actors", actorFilters);
         }
 
         McpToolRequest request = new McpToolRequest("movie.search", arguments);

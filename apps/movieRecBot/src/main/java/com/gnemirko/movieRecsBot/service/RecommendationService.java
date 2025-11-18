@@ -6,7 +6,9 @@ import com.gnemirko.movieRecsBot.dto.RecResponse;
 import com.gnemirko.movieRecsBot.entity.MovieOpinion;
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
+import com.gnemirko.movieRecsBot.mcp.MovieContextItem;
 import com.gnemirko.movieRecsBot.mcp.MovieContextService;
+import com.gnemirko.movieRecsBot.mcp.MovieContextService.ContextBlock;
 import com.gnemirko.movieRecsBot.util.Jsons;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +22,7 @@ import java.util.stream.Collectors;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.escapeHtml;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.htmlToPlain;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.sanitize;
-import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.scrubMarkdownArtifacts;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.sanitizeAllowBasicHtml;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.stripCodeFence;
 
 @Service
@@ -34,6 +36,7 @@ public class RecommendationService {
     private final UserProfileService userProfileService;
     private final MovieContextService movieContextService;
     private final LanguageDetectionService languageDetectionService;
+    private final CatalogMetadataResolver catalogMetadataResolver;
 
     private static final String BASE_SYSTEM = """
             You are MovieMate, a movie recommendation assistant.
@@ -46,6 +49,7 @@ public class RecommendationService {
             5) Keep it short: 3–5 movies, each with one concise reason it fits.
             6) Stay on the movie topic (genres, vibe, actors, recent watches) to understand the request better.
             7) Be honest about metadata: never make up cast, release year, or genre details.
+            8) Treat the CATALOG FACTS block as the source of truth for canonical title/year/genre; copy those values directly and never invent a year.
 
             FORMAT FOR TELEGRAM (HTML):
             - Start with a one-line intro.
@@ -59,15 +63,18 @@ public class RecommendationService {
             Otherwise ask exactly one new clarifying question with no preface and no numbering.
             """;
 
-    private static final String JSON_RESPONSE_PROMPT = """
+    private static final String JSON_RESPONSE_PROMPT_TEMPLATE = """
             Return ONLY JSON with this structure:
             {
+              "language": "%s",
               "intro": "short intro",
               "movies": [
                 {"title":"...", "year":1999, "reason":"...", "genres":["Fantasy","..."]}
               ]
             }
-            Strictly 3–5 movies. Obey all user genre preferences and block lists.
+            Strictly 3–5 movies. Obey all user genre preferences and block lists. Ensure the "language" value
+            exactly matches the target ISO code. If a movie exists in the CATALOG FACTS block, copy its title and
+            year exactly from there. When the catalog lacks a year, set "year": null instead of guessing.
             """;
 
     private static final String NO_MATCH_TEMPLATE = "I couldn’t find a good match. Share 1–2 favorites and I’ll suggest something similar.";
@@ -80,17 +87,24 @@ public class RecommendationService {
         UserLanguage language = languageDetectionService.detect(userText);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
-        String movieContext = movieContextService.buildContextBlock(userText, profileSummary, profile);
+        List<String> actorFilters = resolveActorFilters(userText, profile);
+        ContextBlock contextBlock = movieContextService.buildContextBlock(userText, profileSummary, profile, language, actorFilters);
+        String movieContext = contextBlock.block();
+        List<MovieContextItem> catalogItems = contextBlock.items();
         boolean force = dialogPolicy.recommendNow(chatId, userText);
         String out;
         if (force) {
-            out = renderRecommendations(history, userText, profileSummary, movieContext, profile, language);
+            out = renderRecommendations(history, userText, profileSummary, movieContext, profile, language, catalogItems);
             dialogPolicy.reset(chatId);
             out = appendOpinionReminder(out, language);
         } else {
             String next = stripCodeFence(askOneQuestionOrRecommend(history, userText, profileSummary, movieContext, language)).trim();
-            if ("__RECOMMEND__".equalsIgnoreCase(next)) {
-                out = renderRecommendations(history, userText, profileSummary, movieContext, profile, language);
+            boolean formattedAnswer = RecommendationMessageClassifier.looksLikeRecommendation(next);
+            if ("__RECOMMEND__".equalsIgnoreCase(next) || formattedAnswer) {
+                if (formattedAnswer && log.isDebugEnabled()) {
+                    log.debug("LLM returned formatted recommendations in question stage for chat {}", chatId);
+                }
+                out = renderRecommendations(history, userText, profileSummary, movieContext, profile, language, catalogItems);
                 dialogPolicy.reset(chatId);
                 out = appendOpinionReminder(out, language);
             } else {
@@ -101,6 +115,19 @@ public class RecommendationService {
         userContextService.append(chatId, "User: " + userText);
         userContextService.append(chatId, "Bot: " + htmlToPlain(out));
         return out;
+    }
+
+    private List<String> resolveActorFilters(String userText, UserProfile profile) {
+        LinkedHashSet<String> filters = new LinkedHashSet<>();
+        filters.addAll(ActorMentionExtractor.extract(userText));
+        if (profile != null && profile.getLikedActors() != null) {
+            filters.addAll(profile.getLikedActors());
+        }
+        return filters.stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .limit(5)
+                .toList();
     }
 
     private String askOneQuestionOrRecommend(String history,
@@ -121,10 +148,11 @@ public class RecommendationService {
                                          String profileSummary,
                                          String movieContext,
                                          UserProfile profile,
-                                         UserLanguage language) {
+                                         UserLanguage language,
+                                         List<MovieContextItem> catalogItems) {
         String raw = chatClient
                 .prompt()
-                .system(buildSystemPrompt(language, userText, JSON_RESPONSE_PROMPT))
+                .system(buildSystemPrompt(language, userText, jsonResponsePrompt(language)))
                 .user(enrich(history, userText, profileSummary, movieContext))
                 .call()
                 .content();
@@ -136,8 +164,12 @@ public class RecommendationService {
             log.debug("LLM response failed RecResponse validation: {}", e.getMessage());
         }
 
-        Parsed parsed = parseAndFilter(json, profile, userText);
+        Parsed parsed = parseAndFilter(json, profile, userText, catalogItems, language);
         if (parsed.movies.isEmpty()) {
+            if (RecommendationMessageClassifier.looksLikeRecommendation(raw)) {
+                log.warn("LLM skipped JSON contract but returned formatted recommendations.");
+                return sanitizeAllowBasicHtml(raw);
+            }
             return sanitize(localizedHelperText(NO_MATCH_TEMPLATE, "noMovies", language));
         }
         StringBuilder sb = new StringBuilder();
@@ -148,23 +180,30 @@ public class RecommendationService {
         for (Movie movie : parsed.movies) {
             if (idx > 5) break;
 
-            String rawTitle = stripMarkdown(nvl(movie.title).trim());
-            sb.append(idx).append(". <b>").append(escapeHtml(rawTitle));
-            if (movie.year != null && !containsYear(rawTitle, movie.year)) {
-                sb.append(" (").append(movie.year).append(")");
-            }
-            sb.append("</b> — ").append(escapeHtml(stripMarkdown(nvl(movie.reason)))).append("\n\n");
+            String rawTitle = stripMarkdown(nvl(movie.title));
+            String decoratedTitle = TitleFormatter.formatWithVerifiedYear(rawTitle, movie.year);
+            sb.append(idx)
+                    .append(". <b>")
+                    .append(escapeHtml(decoratedTitle))
+                    .append("</b> — ")
+                    .append(escapeHtml(stripMarkdown(nvl(movie.reason))))
+                    .append("\n\n");
             idx++;
         }
-        return scrubMarkdownArtifacts(sb.toString().trim());
+        return sb.toString().trim();
     }
 
-    private Parsed parseAndFilter(String json, UserProfile profile, String userText) {
+    private Parsed parseAndFilter(String json,
+                                  UserProfile profile,
+                                  String userText,
+                                  List<MovieContextItem> catalogItems,
+                                  UserLanguage expectedLanguage) {
         Parsed out = new Parsed();
         try {
             ObjectMapper om = new ObjectMapper();
             JsonNode root = om.readTree(json);
             out.intro = text(root.get("intro"));
+            out.languageIso = text(root.get("language"));
             JsonNode arr = root.get("movies");
             if (arr != null && arr.isArray()) {
                 List<Movie> all = new ArrayList<>();
@@ -181,7 +220,13 @@ public class RecommendationService {
                     m.genres = genres;
                     if (!isBlank(m.title)) all.add(m);
                 }
-                out.movies = postFilter(all, profile, userText);
+                List<Movie> filtered = postFilter(all, profile, userText);
+                catalogMetadataResolver.reconcileYears(filtered, catalogItems);
+                out.movies = filtered;
+            }
+            if (!isBlank(out.languageIso) && expectedLanguage != null
+                    && !out.languageIso.equalsIgnoreCase(expectedLanguage.isoCode())) {
+                log.warn("LLM responded in {} but expected {}.", out.languageIso, expectedLanguage.isoCode());
             }
         } catch (Exception e) {
             log.debug("Failed to parse LLM JSON payload: {}", e.getMessage());
@@ -229,28 +274,28 @@ public class RecommendationService {
 
     private String enrich(String history, String userText, String profileSummary, String movieContext) {
         StringBuilder sb = new StringBuilder();
-        if (!history.isBlank()) sb.append("История (сокр.):\n").append(history).append("\n\n");
-        if (!profileSummary.isBlank()) sb.append("Профиль пользователя:\n").append(profileSummary).append("\n\n");
+        if (!history.isBlank()) sb.append("History (truncated):\n").append(history).append("\n\n");
+        if (!profileSummary.isBlank()) sb.append("User profile:\n").append(profileSummary).append("\n\n");
         if (movieContext != null && !movieContext.isBlank()) {
             sb.append(movieContext.trim()).append("\n\n");
         }
-        sb.append("Пользователь: ").append(userText);
+        sb.append("User: ").append(userText);
         return sb.toString();
     }
 
     private String buildProfileSummary(UserProfile p) {
         StringBuilder sb = new StringBuilder();
-        if (!p.getLikedGenres().isEmpty()) sb.append("Желаемые жанры: ").append(p.getLikedGenres()).append(". ");
-        if (!p.getLikedActors().isEmpty()) sb.append("Любимые актёры: ").append(p.getLikedActors()).append(". ");
+        if (!p.getLikedGenres().isEmpty()) sb.append("Preferred genres: ").append(p.getLikedGenres()).append(". ");
+        if (!p.getLikedActors().isEmpty()) sb.append("Favorite actors: ").append(p.getLikedActors()).append(". ");
         if (!p.getLikedDirectors().isEmpty())
-            sb.append("Любимые режиссёры: ").append(p.getLikedDirectors()).append(". ");
-        if (!p.getBlocked().isEmpty()) sb.append("Не предлагать: ").append(p.getBlocked()).append(". ");
+            sb.append("Favorite directors: ").append(p.getLikedDirectors()).append(". ");
+        if (!p.getBlocked().isEmpty()) sb.append("Block list: ").append(p.getBlocked()).append(". ");
         if (!p.getWatchedMovies().isEmpty()) {
             String watched = p.getWatchedMovies().stream()
                     .limit(5)
                     .map(this::shortOpinion)
                     .collect(Collectors.joining("; "));
-            if (!watched.isEmpty()) sb.append("Недавние отзывы: ").append(watched).append(". ");
+            if (!watched.isEmpty()) sb.append("Recent opinions: ").append(watched).append(". ");
         }
         return sb.toString().trim();
     }
@@ -277,12 +322,6 @@ public class RecommendationService {
         return s == null ? "" : s;
     }
 
-    private static boolean containsYear(String title, Integer year) {
-        if (title == null || year == null) return false;
-        String normalized = title.replaceAll("[^0-9]", "");
-        return normalized.contains(String.valueOf(year));
-    }
-
     private static String stripMarkdown(String value) {
         if (value == null || value.isEmpty()) return "";
         return value.replaceAll("[\\*_`~]+", "");
@@ -301,12 +340,18 @@ public class RecommendationService {
         if (text == null || text.isBlank()) return text;
         String reminderText = localizedHelperText(REMINDER_TEMPLATE, "reminder", language);
         String reminder = "<i>" + escapeHtml(reminderText) + "</i>";
-        return scrubMarkdownArtifacts(text) + "\n\n" + reminder;
+        return text + "\n\n" + reminder;
     }
 
     private String buildSystemPrompt(UserLanguage language, String userText, String taskSpecificPrompt) {
         String directive = language.directive(userText);
-        return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + directive + "\n\n" + taskSpecificPrompt;
+        String strictness = "Respond strictly in " + language.displayName() + " (" + language.isoCode()
+                + "). Keep official title names as stored in IMDb and never translate them.";
+        return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + directive + "\n" + strictness + "\n\n" + taskSpecificPrompt;
+    }
+
+    private String jsonResponsePrompt(UserLanguage language) {
+        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted(language.isoCode());
     }
 
     private String localizedHelperText(String english, String keyPrefix, UserLanguage language) {
@@ -329,10 +374,11 @@ public class RecommendationService {
 
     private static final class Parsed {
         String intro = "";
+        String languageIso = "";
         List<Movie> movies = new ArrayList<>();
     }
 
-    private static final class Movie {
+    static final class Movie {
         String title;
         Integer year;
         String reason;

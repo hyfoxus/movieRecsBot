@@ -171,6 +171,11 @@ public class EmbeddingService {
         if (!details.isEmpty()) {
             sb.append("\n").append(String.join("; ", details));
         }
+
+        List<String> actors = fetchTopActors(movie.getId());
+        if (!actors.isEmpty()) {
+            sb.append("\nActors: ").append(String.join(", ", actors));
+        }
         return sb.toString();
     }
 
@@ -237,5 +242,23 @@ public class EmbeddingService {
             return response.getStatusCode().is5xxServerError();
         }
         return throwable instanceof WebClientRequestException || throwable instanceof TimeoutException;
+    }
+
+    private List<String> fetchTopActors(Long movieId) {
+        if (movieId == null) {
+            return List.of();
+        }
+        return jdbc.query(
+                """
+                        SELECT p.primary_name
+                        FROM movie_principal mp
+                        JOIN person p ON p.id = mp.person_id
+                        WHERE mp.movie_id = ? AND mp.category IN ('actor','actress')
+                        ORDER BY mp.ordering NULLS LAST, p.primary_name
+                        LIMIT 5
+                        """,
+                (rs, rowNum) -> rs.getString(1),
+                movieId
+        );
     }
 }

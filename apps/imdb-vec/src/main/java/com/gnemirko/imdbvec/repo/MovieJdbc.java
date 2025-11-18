@@ -9,7 +9,9 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC layer for vector search + hybrid ranking.
@@ -29,7 +31,11 @@ public class MovieJdbc {
             Short year,
             Double rating,
             Integer votes,
-            double similarity
+            double similarity,
+            String[] genres,
+            String plot,
+            List<String> actorNames,
+            List<String> actorIds
     ) {}
 
     public MovieJdbc(JdbcTemplate jdbc,
@@ -80,6 +86,7 @@ public class MovieJdbc {
     public List<RecoRow> topN(float[] queryVec,
                               String[] includeGenres,
                               String[] excludeGenres,
+                              String[] includeActorNames,
                               Short fromYear,
                               Short toYear,
                               Integer runtimeMax,
@@ -98,7 +105,7 @@ public class MovieJdbc {
 
         String sql = """
             WITH filtered AS (
-              SELECT id, tconst, primary_title, start_year, rating, votes, embedding
+              SELECT id, tconst, primary_title, start_year, rating, votes, genres, plot, embedding
               FROM movie m
               WHERE (:fromYear IS NULL OR m.start_year >= :fromYear)
                 AND (:toYear   IS NULL OR m.start_year <= :toYear)
@@ -112,14 +119,53 @@ public class MovieJdbc {
                       COALESCE(:exc, ARRAY[]::text[]) = ARRAY[]::text[]
                       OR NOT EXISTS (SELECT 1 FROM unnest(:exc) g WHERE g = ANY(m.genres))
                     )
+                AND (
+                      COALESCE(:actorNames, ARRAY[]::text[]) = ARRAY[]::text[]
+                      OR EXISTS (
+                          SELECT 1
+                          FROM movie_principal mp
+                          JOIN person p ON p.id = mp.person_id
+                          WHERE mp.movie_id = m.id
+                            AND mp.category IN ('actor','actress')
+                            AND LOWER(p.primary_name) = ANY(:actorNames)
+                      )
+                    )
                 AND m.embedding IS NOT NULL
             )
-            SELECT id, tconst, primary_title, start_year, rating, votes,
+            SELECT filtered.id,
+                   filtered.tconst,
+                   filtered.primary_title,
+                   filtered.start_year,
+                   filtered.rating,
+                   filtered.votes,
                    (1 - (embedding <=> CAST(:vec AS vector))) AS sim,
                    (0.60*(1 - (embedding <=> CAST(:vec AS vector)))
                     + 0.30*LEAST(COALESCE(rating,0)/10.0,1.0)
-                    + 0.10*LOG10(GREATEST(COALESCE(votes,0),1))) AS score
+                    + 0.10*LOG10(GREATEST(COALESCE(votes,0),1))) AS score,
+                   filtered.genres,
+                   filtered.plot,
+                   ap.actor_names,
+                   ap.actor_ids
             FROM filtered
+            LEFT JOIN LATERAL (
+              SELECT
+                ARRAY(
+                  SELECT p.primary_name
+                  FROM movie_principal mp
+                  JOIN person p ON p.id = mp.person_id
+                  WHERE mp.movie_id = filtered.id AND mp.category IN ('actor','actress')
+                  ORDER BY mp.ordering NULLS LAST, p.primary_name
+                  LIMIT 5
+                ) AS actor_names,
+                ARRAY(
+                  SELECT p.nconst
+                  FROM movie_principal mp
+                  JOIN person p ON p.id = mp.person_id
+                  WHERE mp.movie_id = filtered.id AND mp.category IN ('actor','actress')
+                  ORDER BY mp.ordering NULLS LAST, p.primary_name
+                  LIMIT 5
+                ) AS actor_ids
+            ) ap ON TRUE
             ORDER BY score DESC
             LIMIT :limit
             """;
@@ -131,6 +177,7 @@ public class MovieJdbc {
                 .addValue("minRating", minRating)
                 .addValue("inc", includeGenres == null ? new String[]{} : includeGenres)
                 .addValue("exc", excludeGenres == null ? new String[]{} : excludeGenres)
+                .addValue("actorNames", includeActorNames == null ? new String[]{} : includeActorNames)
                 .addValue("vec", vec)
                 .addValue("limit", limit);
 
@@ -143,11 +190,39 @@ public class MovieJdbc {
                         rs.getObject("start_year", Short.class),
                         rs.getObject("rating") == null ? null : rs.getDouble("rating"),
                         rs.getObject("votes") == null ? null : rs.getInt("votes"),
-                        rs.getDouble("sim")
+                        rs.getDouble("sim"),
+                        arrayToString(rs, "genres"),
+                        rs.getString("plot"),
+                        arrayToList(rs, "actor_names"),
+                        arrayToList(rs, "actor_ids")
                 );
             }
         };
 
         return np.query(sql, p, mapper);
+    }
+
+    private static List<String> arrayToList(ResultSet rs, String column) throws SQLException {
+        java.sql.Array array = rs.getArray(column);
+        if (array == null) {
+            return List.of();
+        }
+        String[] data = (String[]) array.getArray();
+        if (data == null || data.length == 0) {
+            return List.of();
+        }
+        return Arrays.stream(data)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    private static String[] arrayToString(ResultSet rs, String column) throws SQLException {
+        java.sql.Array array = rs.getArray(column);
+        if (array == null) {
+            return null;
+        }
+        return (String[]) array.getArray();
     }
 }

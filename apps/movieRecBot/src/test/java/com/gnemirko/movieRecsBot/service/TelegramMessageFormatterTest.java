@@ -22,4 +22,21 @@ class TelegramMessageFormatterTest {
         assertThat(html).contains("<b>Начало (2010)</b>");
         assertThat(html).contains("<b>Привидение (2015)</b>");
     }
+
+    @Test
+    void sanitizeAllowHtml_keepsAllowedTagsIntact() {
+        String markdownLikeHtml = """
+                Вот несколько интересных фэнтези фильмов, которые могут вам понравиться.
+
+                1. <b>Властелин колец: Братство кольца</b> (2001) — Эпическая история.
+
+                2. <b>Лабиринт Фавна</b> (2006) — Сказка.
+                """;
+
+        String html = TelegramMessageFormatter.sanitizeAllowBasicHtml(markdownLikeHtml);
+
+        assertThat(html).contains("<b>Властелин колец: Братство кольца</b>");
+        assertThat(html).contains("<b>Лабиринт Фавна</b>");
+        assertThat(html).doesNotContain("&lt;b&gt;");
+    }
 }

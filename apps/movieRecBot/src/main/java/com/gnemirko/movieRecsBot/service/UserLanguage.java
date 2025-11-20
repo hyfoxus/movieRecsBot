@@ -21,11 +21,11 @@ public final class UserLanguage {
         this.detected = detected;
     }
 
-    static UserLanguage fromIsoCode(String isoCode) {
+    public static UserLanguage fromIsoCode(String isoCode) {
         return fromIsoCode(isoCode, null);
     }
 
-    static UserLanguage fromIsoCode(String isoCode, String displayName) {
+    public static UserLanguage fromIsoCode(String isoCode, String displayName) {
         if (isoCode == null || isoCode.isBlank()) {
             return englishFallback();
         }
@@ -35,18 +35,18 @@ public final class UserLanguage {
         return new UserLanguage(isoCode, name, true);
     }
 
-    static UserLanguage englishFallback() {
+    public static UserLanguage englishFallback() {
         return new UserLanguage("en", "English", false);
     }
 
-    String directive(String rawUserText) {
+    public String directive(String rawUserText) {
         if (!detected) {
             return "User language could not be detected reliably. Respond in English.";
         }
         return "The user's latest message is in " + displayName + " (" + isoCode + "). Respond strictly in that language.";
     }
 
-    boolean requiresTranslation() {
+    public boolean requiresTranslation() {
         return !"en".equalsIgnoreCase(isoCode);
     }
 

@@ -17,29 +17,39 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final UserProfileRepository repo;
 
 
+    @Transactional
     public UserProfile getOrCreate(Long chatId) {
         return repo.findById(chatId)
                 .orElseGet(() -> repo.save(UserProfile.builder().telegramUserId(chatId).build()));
     }
 
+    @Transactional(readOnly = true)
+    public UserProfileSnapshot snapshot(Long chatId) {
+        return UserProfileSnapshot.from(getOrCreate(chatId));
+    }
+
+    @Transactional
     public UserProfile addGenres(Long tgUserId, Collection<String> genres) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedGenres().addAll(normalize(genres));
         return p;
     }
 
+    @Transactional
     public UserProfile addActors(Long tgUserId, Collection<String> actors) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedActors().addAll(normalize(actors));
         return p;
     }
 
+    @Transactional
     public UserProfile addDirectors(Long tgUserId, Collection<String> directors) {
         UserProfile p = getOrCreate(tgUserId);
         p.getLikedDirectors().addAll(normalize(directors));
         return p;
     }
 
+    @Transactional
     public UserProfile blockTags(Long tgUserId, Collection<String> tags) {
         UserProfile p = getOrCreate(tgUserId);
         p.getBlocked().addAll(normalize(tags));
@@ -57,7 +67,6 @@ public class UserProfileServiceImpl implements UserProfileService {
         return p;
     }
 
-    @Transactional
     public UserProfile addMovieOpinion(Long tgUserId, String movieTitle, String opinion) {
         UserProfile p = getOrCreate(tgUserId);
         String title = trimToNull(movieTitle);
@@ -75,7 +84,6 @@ public class UserProfileServiceImpl implements UserProfileService {
     }
 
 
-    @Transactional
     public void reset(long chatId) {
         var u = getOrCreate(chatId);
         u.getLikedGenres().clear();

@@ -26,4 +26,10 @@ class ActorMentionExtractorTest {
         Set<String> names = ActorMentionExtractor.extract("фильм Киану");
         assertThat(names).isEmpty();
     }
+
+    @Test
+    void extractsLowercaseCyrillicName() {
+        Set<String> names = ActorMentionExtractor.extract("подскажи фильм свежий с бредом питтом");
+        assertThat(names).containsExactly("Бредом Питтом");
+    }
 }

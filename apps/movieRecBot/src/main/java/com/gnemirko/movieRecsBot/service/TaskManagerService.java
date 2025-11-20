@@ -2,7 +2,6 @@ package com.gnemirko.movieRecsBot.service;
 
 import com.gnemirko.movieRecsBot.entity.RecommendationTask;
 import com.gnemirko.movieRecsBot.repository.RecommendationTaskRepository;
-import com.gnemirko.movieRecsBot.webhook.MovieWebhookBot;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -10,29 +9,24 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadLocalRandom;
 
 import static com.gnemirko.movieRecsBot.entity.RecommendationTask.Status.*;
-import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.htmlToPlain;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TaskManagerService {
 
-    private static final char[] DISPLAY_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
-    private static final int DISPLAY_ID_LENGTH = 6;
-
     private final RecommendationService recommendationService;
     private final RecommendationTaskRepository repo;
-    private final MovieWebhookBot sender;
     private final LlmBulkhead llmBulkhead;
     private final @Qualifier("recExecutor") Executor recExecutor;
+    private final TaskNotifier taskNotifier;
+    private final DisplayIdGenerator displayIdGenerator;
 
     @EventListener(ApplicationReadyEvent.class)
     public void resumeQueuedTasks() {
@@ -43,7 +37,7 @@ public class TaskManagerService {
         log.info("Resuming {} pending recommendation tasks", pending.size());
         pending.forEach(task -> {
             if (task.getDisplayId() == null || task.getDisplayId().isBlank()) {
-                task.setDisplayId(nextDisplayId());
+                task.setDisplayId(displayIdGenerator.nextId());
             }
             if (task.getStatus() == RUNNING) {
                 task.setStatus(QUEUED);
@@ -55,7 +49,7 @@ public class TaskManagerService {
     }
 
     public RecommendationTask enqueue(Long chatId, Long userId, String prompt) {
-        String displayId = nextDisplayId();
+        String displayId = displayIdGenerator.nextId();
         RecommendationTask t = RecommendationTask.builder()
                 .displayId(displayId)
                 .chatId(chatId)
@@ -68,28 +62,6 @@ public class TaskManagerService {
         log.info("Queued recommendation task {} for chat {}", displayId, chatId);
         dispatch(saved.getId());
         return saved;
-    }
-
-    private String nextDisplayId() {
-        for (int attempt = 0; attempt < 10; attempt++) {
-            String candidate = randomDisplayId();
-            if (!repo.existsByDisplayId(candidate)) {
-                return candidate;
-            }
-        }
-        String candidate;
-        do {
-            candidate = randomDisplayId();
-        } while (repo.existsByDisplayId(candidate));
-        return candidate;
-    }
-
-    private String randomDisplayId() {
-        char[] buf = new char[DISPLAY_ID_LENGTH];
-        for (int i = 0; i < DISPLAY_ID_LENGTH; i++) {
-            buf[i] = DISPLAY_ID_ALPHABET[ThreadLocalRandom.current().nextInt(DISPLAY_ID_ALPHABET.length)];
-        }
-        return new String(buf);
     }
 
     private void dispatch(Long taskId) {
@@ -132,7 +104,7 @@ public class TaskManagerService {
             repo.save(t);
 
             log.info("Recommendation task {} ({}) completed successfully", taskId, displayId);
-            sendMessage(SendMessage.builder()
+            taskNotifier.send(SendMessage.builder()
                     .chatId(String.valueOf(t.getChatId()))
                     .text(text)
                     .parseMode("HTML")
@@ -147,33 +119,12 @@ public class TaskManagerService {
             repo.save(t);
 
             log.debug("Recommendation task {} ({}) failed: {}", taskId, displayId, e.getMessage());
-            sendMessage(SendMessage.builder()
+            taskNotifier.send(SendMessage.builder()
                     .chatId(String.valueOf(t.getChatId()))
                     .text("💥 Ошибка в рекомендации: " + e.getMessage())
                     .build());
         } finally {
             cleanupTask(t);
-        }
-    }
-
-    private void sendMessage(SendMessage message) {
-        try {
-            sender.execute(message);
-        } catch (TelegramApiException e) {
-            log.error("Failed to send Telegram message: {} | payload='{}'", e.getMessage(), message.getText(), e);
-            if ("HTML".equalsIgnoreCase(message.getParseMode())) {
-                try {
-                    SendMessage fallback = SendMessage.builder()
-                            .chatId(message.getChatId())
-                            .text(htmlToPlain(message.getText()))
-                            .disableWebPagePreview(message.getDisableWebPagePreview())
-                            .replyMarkup(message.getReplyMarkup())
-                            .build();
-                    sender.execute(fallback);
-                } catch (TelegramApiException ex) {
-                    log.error("Fallback send also failed: {}", ex.getMessage(), ex);
-                }
-            }
         }
     }
 

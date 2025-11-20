@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-class LanguageDetectionService {
+public class LanguageDetectionService {
 
     private static final String DETECTION_PROMPT = """
             You are a precise language detector.
@@ -26,7 +26,7 @@ class LanguageDetectionService {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
-    UserLanguage detect(String text) {
+    public UserLanguage detect(String text) {
         if (text == null || text.isBlank()) {
             return UserLanguage.englishFallback();
         }

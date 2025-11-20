@@ -1,8 +1,8 @@
 package com.gnemirko.movieRecsBot.handler;
 
 import com.gnemirko.movieRecsBot.entity.MovieOpinion;
-import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.service.UserProfileService;
+import com.gnemirko.movieRecsBot.service.UserProfileSnapshot;
 import com.gnemirko.movieRecsBot.util.CmdText;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -16,14 +16,14 @@ public class ProfileCommandHandler {
     private final UserProfileService userProfileService;
 
     public String profileText(long chatId) {
-        UserProfile profile = userProfileService.getOrCreate(chatId);
-        String genres = profile.getLikedGenres().isEmpty() ? "—" : String.join(", ", profile.getLikedGenres());
-        String actors = profile.getLikedActors().isEmpty() ? "—" : String.join(", ", profile.getLikedActors());
-        String directors = profile.getLikedDirectors().isEmpty() ? "—" : String.join(", ", profile.getLikedDirectors());
-        String blocked = profile.getBlocked().isEmpty() ? "—" : String.join(", ", profile.getBlocked());
-        String watched = profile.getWatchedMovies().isEmpty()
+        UserProfileSnapshot profile = userProfileService.snapshot(chatId);
+        String genres = profile.likedGenres().isEmpty() ? "—" : String.join(", ", profile.likedGenres());
+        String actors = profile.likedActors().isEmpty() ? "—" : String.join(", ", profile.likedActors());
+        String directors = profile.likedDirectors().isEmpty() ? "—" : String.join(", ", profile.likedDirectors());
+        String blocked = profile.blocked().isEmpty() ? "—" : String.join(", ", profile.blocked());
+        String watched = profile.watchedMovies().isEmpty()
                 ? " —"
-                : "\n  " + profile.getWatchedMovies().stream()
+                : "\n  " + profile.watchedMovies().stream()
                 .limit(3)
                 .map(this::formatOpinion)
                 .collect(Collectors.joining("\n  "));

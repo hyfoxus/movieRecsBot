@@ -8,6 +8,8 @@ import java.util.Collection;
 public interface UserProfileService {
     UserProfile getOrCreate(Long chatId);
 
+    UserProfileSnapshot snapshot(Long chatId);
+
     UserProfile addGenres(Long tgUserId, Collection<String> genres);
 
     UserProfile addActors(Long tgUserId, Collection<String> actors);

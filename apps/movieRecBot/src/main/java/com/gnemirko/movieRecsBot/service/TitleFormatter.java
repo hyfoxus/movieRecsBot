@@ -3,7 +3,7 @@ package com.gnemirko.movieRecsBot.service;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-final class TitleFormatter {
+public final class TitleFormatter {
 
     private static final Pattern[] TRAILING_YEAR_PATTERNS = new Pattern[]{
             Pattern.compile("\\s*[\\(\\[]?(?:18|19|20|21)\\d{2}[\\)\\]]?\\s*$"),
@@ -14,7 +14,7 @@ final class TitleFormatter {
     private TitleFormatter() {
     }
 
-    static String formatWithVerifiedYear(String title, Integer verifiedYear) {
+    public static String formatWithVerifiedYear(String title, Integer verifiedYear) {
         String cleaned = stripTrailingYear(title);
         if (verifiedYear == null) {
             return cleaned;
@@ -24,7 +24,7 @@ final class TitleFormatter {
                 : cleaned + " (" + verifiedYear + ")";
     }
 
-    static String stripTrailingYear(String title) {
+    public static String stripTrailingYear(String title) {
         if (title == null) {
             return "";
         }

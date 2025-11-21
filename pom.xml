@@ -22,6 +22,7 @@
     <modules>
         <module>apps/movieRecBot</module>
         <module>apps/imdb-vec</module>
+        <module>apps/normalizer</module>
     </modules>
 
     <properties>

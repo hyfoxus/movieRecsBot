@@ -1,0 +1,12 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: normalizer-service
+normalizer:
+  ollama:
+    base-url: http://localhost:11434
+    detection-model: llama3.1:8b
+    translation-model: llama3.1:8b
+    timeout: 15s
+    temperature: 0.1

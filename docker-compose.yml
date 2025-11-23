@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   monorepo-net:
     driver: bridge
@@ -41,9 +39,12 @@ services:
       DB_NAME: ${POSTGRES_DB:-botdb}
       DB_USERNAME: ${POSTGRES_USER:-botuser}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
+      APP_NORMALIZER_BASE_URL: ${APP_NORMALIZER_BASE_URL:-http://normalizer:8083}
     depends_on:
       movie-recs-db:
         condition: service_healthy
+      normalizer:
+        condition: service_started
     ports:
       - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
@@ -78,6 +79,7 @@ services:
     restart: unless-stopped
     environment:
       OLLAMA_HOST: 0.0.0.0
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
     ports:
       - "${IMDB_OLLAMA_PORT:-11434}:11434"
     volumes:
@@ -126,6 +128,24 @@ services:
       MCP_MAX_K: ${MCP_MAX_K:-15}
     ports:
       - "${MCP_HTTP_PORT:-8082}:8082"
+    networks:
+      - monorepo-net
+
+  normalizer:
+    container_name: movie-normalizer
+    build:
+      context: .
+      dockerfile: apps/normalizer/Dockerfile
+    environment:
+      NORMALIZER_OLLAMA_BASE_URL: ${NORMALIZER_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      NORMALIZER_OLLAMA_DETECTION_MODEL: ${NORMALIZER_OLLAMA_DETECTION_MODEL:-llama3.1:8b-instruct-q4_0}
+      NORMALIZER_OLLAMA_TRANSLATION_MODEL: ${NORMALIZER_OLLAMA_TRANSLATION_MODEL:-llama3.1:8b-instruct-q4_0}
+      NORMALIZER_OLLAMA_TIMEOUT: ${NORMALIZER_OLLAMA_TIMEOUT:-30s}
+    env_file:
+      - ./apps/normalizer/.env
+    ports:
+      - "${NORMALIZER_HTTP_PORT:-8083}:8083"
+    restart: unless-stopped
     networks:
       - monorepo-net
 

@@ -1,7 +1,8 @@
 package com.gnemirko.movieRecsBot.service;
 
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
-import com.gnemirko.movieRecsBot.service.recommendation.HelperTextTranslator;
+import com.gnemirko.movieRecsBot.normalizer.NormalizedInput;
+import com.gnemirko.movieRecsBot.normalizer.TextNormalizer;
 import com.gnemirko.movieRecsBot.service.recommendation.PromptContext;
 import com.gnemirko.movieRecsBot.service.recommendation.PromptContextBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationModelClient;
@@ -32,33 +33,37 @@ public class RecommendationService {
     private final RecommendationModelClient recommendationModelClient;
     private final RecommendationResponseParser responseParser;
     private final RecommendationRenderer recommendationRenderer;
-    private final HelperTextTranslator helperTextTranslator;
+    private final TextNormalizer textNormalizer;
     private final DialogPolicy dialogPolicy;
     private final UserContextService userContextService;
 
     public String reply(long chatId, String userText) {
-        PromptContext context = promptContextBuilder.build(chatId, userText);
-        String userPrompt = promptBuilder.buildUserPrompt(context, userText);
-        String output = dialogPolicy.recommendNow(chatId, userText)
-                ? generateRecommendation(chatId, context, userText, userPrompt)
-                : handleClarifyingStage(chatId, context, userText, userPrompt);
+        NormalizedInput normalized = textNormalizer.normalizeToEnglish(userText);
+        String normalizedUserText = normalized.normalizedText();
+        UserLanguage language = normalized.language();
 
-        userContextService.append(chatId, "User: " + userText);
-        userContextService.append(chatId, "Bot: " + htmlToPlain(output));
-        return output;
+        PromptContext context = promptContextBuilder.build(chatId, normalizedUserText, language);
+        String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
+        String englishOutput = dialogPolicy.recommendNow(chatId, normalizedUserText)
+                ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
+                : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
+
+        userContextService.append(chatId, "User: " + normalizedUserText);
+        userContextService.append(chatId, "Bot: " + htmlToPlain(englishOutput));
+        return textNormalizer.translateFromEnglish(englishOutput, language);
     }
 
     private String handleClarifyingStage(long chatId,
                                          PromptContext context,
-                                         String userText,
+                                         String normalizedUserText,
                                          String userPrompt) {
-        String systemPrompt = promptBuilder.buildQuestionSystemPrompt(context.language(), userText);
+        String systemPrompt = promptBuilder.buildQuestionSystemPrompt(context.language(), normalizedUserText);
         String response = recommendationModelClient.call(systemPrompt, userPrompt);
         String stripped = stripCodeFence(response).trim();
         boolean looksLikeRecommendation = RecommendationMessageClassifier.looksLikeRecommendation(stripped);
         if ("__RECOMMEND__".equalsIgnoreCase(stripped) || looksLikeRecommendation) {
             dialogPolicy.reset(chatId);
-            return appendOpinionReminder(generateRecommendation(chatId, context, userText, userPrompt), context.language());
+            return appendOpinionReminder(generateRecommendation(chatId, context, normalizedUserText, userPrompt));
         }
         dialogPolicy.countClarifying(chatId);
         return sanitize(stripped);
@@ -66,38 +71,35 @@ public class RecommendationService {
 
     private String generateRecommendation(long chatId,
                                           PromptContext context,
-                                          String userText,
+                                          String normalizedUserText,
                                           String userPrompt) {
-        String systemPrompt = promptBuilder.buildRecommendationSystemPrompt(context.language(), userText);
+        String systemPrompt = promptBuilder.buildRecommendationSystemPrompt(context.language(), normalizedUserText);
         String raw = recommendationModelClient.call(systemPrompt, userPrompt);
         RecommendationResponseParser.ParsedResponse parsed = responseParser.parse(
                 raw,
                 context.profile(),
-                userText,
-                context.language());
-        String rendered = formatRecommendation(raw, parsed, context.language());
+                normalizedUserText,
+                UserLanguage.englishFallback());
+        String rendered = formatRecommendation(raw, parsed);
         dialogPolicy.reset(chatId);
-        return appendOpinionReminder(rendered, context.language());
+        return appendOpinionReminder(rendered);
     }
 
     private String formatRecommendation(String raw,
-                                        RecommendationResponseParser.ParsedResponse parsed,
-                                        UserLanguage language) {
+                                        RecommendationResponseParser.ParsedResponse parsed) {
         if (parsed.movies().isEmpty()) {
             if (RecommendationMessageClassifier.looksLikeRecommendation(raw)) {
                 log.warn("LLM skipped JSON contract but returned formatted recommendations.");
                 return sanitizeAllowBasicHtml(raw);
             }
-            String helper = helperTextTranslator.localize(NO_MATCH_TEMPLATE, "noMovies", language);
-            return sanitize(helper);
+            return sanitize(NO_MATCH_TEMPLATE);
         }
         return recommendationRenderer.render(parsed);
     }
 
-    private String appendOpinionReminder(String text, UserLanguage language) {
+    private String appendOpinionReminder(String text) {
         if (text == null || text.isBlank()) return text;
-        String reminderText = helperTextTranslator.localize(REMINDER_TEMPLATE, "reminder", language);
-        String reminder = "<i>" + escapeHtml(reminderText) + "</i>";
+        String reminder = "<i>" + escapeHtml(REMINDER_TEMPLATE) + "</i>";
         return text + "\n\n" + reminder;
     }
 }

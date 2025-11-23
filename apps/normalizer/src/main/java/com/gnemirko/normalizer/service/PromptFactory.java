@@ -23,6 +23,7 @@ public final class PromptFactory {
                 Output language: %s
                 Rules:
                 - Preserve movie titles, names, and entities.
+                - Keep HTML/markup tags exactly as provided.
                 - Do not add commentary.
                 - Return only the translated text.
                 Text:

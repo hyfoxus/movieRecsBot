@@ -7,6 +7,7 @@ secrets/
 apps/movieRecBot/.env
 apps/imdb-vec/.env
 apps/mcp-fastmcp/.env
+apps/normalizer/.env
 
 ### STS ###
 .apt_generated

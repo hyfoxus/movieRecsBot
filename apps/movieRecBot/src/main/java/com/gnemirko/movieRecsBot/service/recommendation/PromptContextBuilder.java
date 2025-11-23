@@ -5,7 +5,6 @@ import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.mcp.MovieContextService;
 import com.gnemirko.movieRecsBot.mcp.MovieContextService.ContextBlock;
 import com.gnemirko.movieRecsBot.service.ActorMentionExtractor;
-import com.gnemirko.movieRecsBot.service.LanguageDetectionService;
 import com.gnemirko.movieRecsBot.service.UserContextService;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
 import com.gnemirko.movieRecsBot.service.UserProfileService;
@@ -21,17 +20,20 @@ import java.util.stream.Collectors;
 public class PromptContextBuilder {
 
     private final UserProfileService userProfileService;
-    private final LanguageDetectionService languageDetectionService;
     private final UserContextService userContextService;
     private final MovieContextService movieContextService;
 
-    public PromptContext build(long chatId, String userText) {
+    public PromptContext build(long chatId, String normalizedUserText, UserLanguage language) {
         UserProfile profile = userProfileService.getOrCreate(chatId);
-        UserLanguage language = languageDetectionService.detect(userText);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
-        List<String> actorFilters = resolveActorFilters(userText, profile);
-        ContextBlock block = movieContextService.buildContextBlock(userText, profileSummary, profile, language, actorFilters);
+        List<String> actorFilters = resolveActorFilters(normalizedUserText, profile);
+        ContextBlock block = movieContextService.buildContextBlock(
+                normalizedUserText,
+                profileSummary,
+                profile,
+                language,
+                actorFilters);
         return new PromptContext(
                 profile,
                 language,

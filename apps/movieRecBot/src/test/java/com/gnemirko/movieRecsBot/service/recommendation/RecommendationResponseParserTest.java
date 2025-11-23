@@ -43,7 +43,7 @@ class RecommendationResponseParserTest {
                 payload,
                 profile,
                 "что-нибудь научное",
-                UserLanguage.fromIsoCode("ru")
+                UserLanguage.englishFallback()
         );
 
         assertThat(response.movies()).hasSize(1);

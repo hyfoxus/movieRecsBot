@@ -75,9 +75,6 @@ public class MovieContextService {
     }
 
     private String contextHeader(UserLanguage language) {
-        if (language != null && "ru".equalsIgnoreCase(language.isoCode())) {
-            return "CATALOG FACTS (копируй названия и годы строго из списка ниже, не выдумывай годы):";
-        }
         return "CATALOG FACTS (copy exact title/year from this list; never invent years):";
     }
 

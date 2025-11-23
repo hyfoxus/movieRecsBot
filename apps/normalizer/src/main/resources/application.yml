@@ -5,8 +5,8 @@ spring:
     name: normalizer-service
 normalizer:
   ollama:
-    base-url: http://localhost:11434
-    detection-model: llama3.1:8b
-    translation-model: llama3.1:8b
-    timeout: 15s
+    base-url: http://imdb-ollama:11434
+    detection-model: llama3.1:8b-instruct-q4_0
+    translation-model: llama3.1:8b-instruct-q4_0
+    timeout: 30s
     temperature: 0.1

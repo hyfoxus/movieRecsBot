@@ -73,13 +73,13 @@ public class RecommendationPromptBuilder {
     }
 
     private String baseSystem(UserLanguage language, String userText) {
-        String directive = language.directive(userText);
-        String strictness = "Respond strictly in " + language.displayName() + " (" + language.isoCode()
-                + "). Keep official title names as stored in IMDb and never translate them.";
-        return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + directive + "\n" + strictness;
+        String strictness = "Always respond in English. The user's original language might be "
+                + language.displayName() + " (" + language.isoCode()
+                + "), but translation back to that language happens elsewhere. Keep official title names as stored in IMDb and never translate them.";
+        return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + strictness;
     }
 
     private String jsonResponsePrompt(UserLanguage language) {
-        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted(language.isoCode());
+        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted("en");
     }
 }

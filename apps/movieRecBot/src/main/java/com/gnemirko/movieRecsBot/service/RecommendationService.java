@@ -44,35 +44,41 @@ public class RecommendationService {
 
         PromptContext context = promptContextBuilder.build(chatId, normalizedUserText, language);
         String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
-        String englishOutput = dialogPolicy.recommendNow(chatId, normalizedUserText)
+        Reply englishReply = dialogPolicy.recommendNow(chatId, normalizedUserText)
                 ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
                 : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
 
         userContextService.append(chatId, "User: " + normalizedUserText);
-        userContextService.append(chatId, "Bot: " + htmlToPlain(englishOutput));
-        return textNormalizer.translateFromEnglish(englishOutput, language);
+        userContextService.append(chatId, "Bot: " + htmlToPlain(englishReply.text()));
+
+        String localized = textNormalizer.translateFromEnglish(englishReply.text(), language);
+        if (!englishReply.includeReminder()) {
+            return localized;
+        }
+        String localizedReminder = translateReminder(language);
+        return appendOpinionReminder(localized, localizedReminder);
     }
 
-    private String handleClarifyingStage(long chatId,
-                                         PromptContext context,
-                                         String normalizedUserText,
-                                         String userPrompt) {
+    private Reply handleClarifyingStage(long chatId,
+                                        PromptContext context,
+                                        String normalizedUserText,
+                                        String userPrompt) {
         String systemPrompt = promptBuilder.buildQuestionSystemPrompt(context.language(), normalizedUserText);
         String response = recommendationModelClient.call(systemPrompt, userPrompt);
         String stripped = stripCodeFence(response).trim();
         boolean looksLikeRecommendation = RecommendationMessageClassifier.looksLikeRecommendation(stripped);
         if ("__RECOMMEND__".equalsIgnoreCase(stripped) || looksLikeRecommendation) {
             dialogPolicy.reset(chatId);
-            return appendOpinionReminder(generateRecommendation(chatId, context, normalizedUserText, userPrompt));
+            return generateRecommendation(chatId, context, normalizedUserText, userPrompt);
         }
         dialogPolicy.countClarifying(chatId);
-        return sanitize(stripped);
+        return new Reply(sanitize(stripped), false);
     }
 
-    private String generateRecommendation(long chatId,
-                                          PromptContext context,
-                                          String normalizedUserText,
-                                          String userPrompt) {
+    private Reply generateRecommendation(long chatId,
+                                         PromptContext context,
+                                         String normalizedUserText,
+                                         String userPrompt) {
         String systemPrompt = promptBuilder.buildRecommendationSystemPrompt(context.language(), normalizedUserText);
         String raw = recommendationModelClient.call(systemPrompt, userPrompt);
         RecommendationResponseParser.ParsedResponse parsed = responseParser.parse(
@@ -82,7 +88,7 @@ public class RecommendationService {
                 UserLanguage.englishFallback());
         String rendered = formatRecommendation(raw, parsed);
         dialogPolicy.reset(chatId);
-        return appendOpinionReminder(rendered);
+        return new Reply(rendered, true);
     }
 
     private String formatRecommendation(String raw,
@@ -97,9 +103,22 @@ public class RecommendationService {
         return recommendationRenderer.render(parsed);
     }
 
-    private String appendOpinionReminder(String text) {
-        if (text == null || text.isBlank()) return text;
-        String reminder = "<i>" + escapeHtml(REMINDER_TEMPLATE) + "</i>";
+    private String appendOpinionReminder(String text, String reminderText) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        String reminder = "<i>" + escapeHtml(reminderText) + "</i>";
         return text + "\n\n" + reminder;
+    }
+
+    private String translateReminder(UserLanguage language) {
+        if (language == null || !language.requiresTranslation()) {
+            return REMINDER_TEMPLATE;
+        }
+        String translated = textNormalizer.translateFromEnglish(REMINDER_TEMPLATE, language);
+        return translated == null || translated.isBlank() ? REMINDER_TEMPLATE : translated;
+    }
+
+    private record Reply(String text, boolean includeReminder) {
     }
 }

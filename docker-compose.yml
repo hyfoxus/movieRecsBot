@@ -40,6 +40,7 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-botuser}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
       APP_NORMALIZER_BASE_URL: ${APP_NORMALIZER_BASE_URL:-http://normalizer:8083}
+      APP_NORMALIZER_TIMEOUT: ${APP_NORMALIZER_TIMEOUT:-60s}
     depends_on:
       movie-recs-db:
         condition: service_healthy
@@ -80,6 +81,7 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
     ports:
       - "${IMDB_OLLAMA_PORT:-11434}:11434"
     volumes:
@@ -140,7 +142,7 @@ services:
       NORMALIZER_OLLAMA_BASE_URL: ${NORMALIZER_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
       NORMALIZER_OLLAMA_DETECTION_MODEL: ${NORMALIZER_OLLAMA_DETECTION_MODEL:-llama3.1:8b-instruct-q4_0}
       NORMALIZER_OLLAMA_TRANSLATION_MODEL: ${NORMALIZER_OLLAMA_TRANSLATION_MODEL:-llama3.1:8b-instruct-q4_0}
-      NORMALIZER_OLLAMA_TIMEOUT: ${NORMALIZER_OLLAMA_TIMEOUT:-30s}
+      NORMALIZER_OLLAMA_TIMEOUT: ${NORMALIZER_OLLAMA_TIMEOUT:-60s}
     env_file:
       - ./apps/normalizer/.env
     ports:

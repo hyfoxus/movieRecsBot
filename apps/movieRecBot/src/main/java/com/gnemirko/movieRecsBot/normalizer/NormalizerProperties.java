@@ -10,5 +10,5 @@ import java.time.Duration;
 public class NormalizerProperties {
 
     private String baseUrl = "http://normalizer:8083";
-    private Duration timeout = Duration.ofSeconds(5);
+    private Duration timeout = Duration.ofSeconds(60);
 }

@@ -17,7 +17,7 @@ public class TextNormalizer {
         if (response == null) {
             return new NormalizedInput(text, UserLanguage.englishFallback());
         }
-        String normalized = nvl(response.normalizedText(), text);
+        String normalized = nvl(stripPromptDelimiters(response.normalizedText()), text);
         UserLanguage language = UserLanguage.fromIsoCode(resolveDetectedIso(response.detectedLanguage()));
         return new NormalizedInput(normalized, language);
     }
@@ -33,7 +33,8 @@ public class TextNormalizer {
         if (response == null || response.normalizedText() == null || response.normalizedText().isBlank()) {
             return englishText;
         }
-        return response.normalizedText();
+        String cleaned = stripPromptDelimiters(response.normalizedText());
+        return cleaned == null || cleaned.isBlank() ? englishText : cleaned;
     }
 
     private static String nvl(String value, String fallback) {
@@ -48,5 +49,12 @@ public class TextNormalizer {
             return "en";
         }
         return detected;
+    }
+
+    private static String stripPromptDelimiters(String text) {
+        if (text == null) {
+            return null;
+        }
+        return text.replace("<<<", "").replace(">>>", "").trim();
     }
 }

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 
 import static com.gnemirko.movieRecsBot.entity.RecommendationTask.Status.*;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.prepareTelegramHtml;
 
 @Slf4j
 @Service
@@ -98,7 +99,8 @@ public class TaskManagerService {
                 llmBulkhead.release();
             }
 
-            t.setResultText(text);
+            String sanitizedText = prepareTelegramHtml(text);
+            t.setResultText(sanitizedText);
             t.setStatus(DONE);
             t.setFinishedAt(Instant.now());
             repo.save(t);
@@ -106,7 +108,7 @@ public class TaskManagerService {
             log.info("Recommendation task {} ({}) completed successfully", taskId, displayId);
             taskNotifier.send(SendMessage.builder()
                     .chatId(String.valueOf(t.getChatId()))
-                    .text(text)
+                    .text(sanitizedText)
                     .parseMode("HTML")
                     .disableWebPagePreview(true)
                     .build());

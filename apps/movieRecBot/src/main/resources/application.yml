@@ -25,7 +25,7 @@ logging:
 app:
   mcp:
     base-url: ${MCP_BASE_URL:http://imdb-mcp:8082}
-    timeout-ms: ${MCP_TIMEOUT_MS:4000}
+    timeout-ms: ${MCP_TIMEOUT_MS:10000}
   normalizer:
     base-url: ${NORMALIZER_BASE_URL:http://normalizer:8083}
-    timeout: ${NORMALIZER_TIMEOUT:5s}
+    timeout: ${NORMALIZER_TIMEOUT:60s}

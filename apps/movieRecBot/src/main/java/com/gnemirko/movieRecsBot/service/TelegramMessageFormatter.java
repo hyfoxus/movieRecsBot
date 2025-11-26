@@ -38,6 +38,20 @@ public final class TelegramMessageFormatter {
         return restoreAllowedHtmlTags(escaped).trim();
     }
 
+    public static String prepareTelegramHtml(String raw) {
+        return sanitizeAllowBasicHtml(removePromptDelimiters(raw));
+    }
+
+    public static String removePromptDelimiters(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.isEmpty()) {
+            return "";
+        }
+        return text.replace("<<<", "").replace(">>>", "");
+    }
+
     public static String stripCodeFence(String text) {
         if (text == null) {
             return "";

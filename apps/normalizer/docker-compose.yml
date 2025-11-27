@@ -1,0 +1,22 @@
+services:
+  normalizer:
+    build:
+      context: ../..
+      dockerfile: apps/normalizer/Dockerfile
+    image: movie-normalizer:dev
+    env_file:
+      - .env
+    environment:
+      NORMALIZER_OLLAMA_BASE_URL: ${NORMALIZER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      NORMALIZER_OLLAMA_DETECTION_MODEL: ${NORMALIZER_OLLAMA_DETECTION_MODEL:-llama3.1:8b-instruct-q4_0}
+      NORMALIZER_OLLAMA_TRANSLATION_MODEL: ${NORMALIZER_OLLAMA_TRANSLATION_MODEL:-llama3.1:8b-instruct-q4_0}
+      NORMALIZER_OLLAMA_TIMEOUT: ${NORMALIZER_OLLAMA_TIMEOUT:-60s}
+    ports:
+      - "${NORMALIZER_HTTP_PORT:-8083}:8083"
+    restart: unless-stopped
+    networks:
+      - monorepo-net
+
+networks:
+  monorepo-net:
+    external: true

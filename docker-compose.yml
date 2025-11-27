@@ -1,53 +1,162 @@
+networks:
+  monorepo-net:
+    driver: bridge
+
 services:
-  db:
+  movie-recs-db:
     image: postgres:16
+    container_name: movie-recs-db
+    env_file:
+      - ./apps/movieRecBot/.env
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-botdb}
       POSTGRES_USER: ${POSTGRES_USER:-botuser}
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-botuser} -d ${POSTGRES_DB:-botdb}"]
       interval: 5s
       timeout: 3s
       retries: 10
     volumes:
-      - dbdata:/var/lib/postgresql/data
+      - movie-recs-dbdata:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    secrets:
-      - postgres_password
+      - "${POSTGRES_PORT:-15432}:5432"
+    networks:
+      - monorepo-net
 
-  bot:
+  movie-recs-bot:
+    container_name: movie-recs-bot
     build:
       context: .
-      dockerfile: Dockerfile
-    image: movie-recbot:dev
+      dockerfile: apps/movieRecBot/Dockerfile
+    image: movie-recs-bot:dev
     env_file:
-      - .env
+      - ./apps/movieRecBot/.env
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-postgres}
-      DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-5432}
+      DB_HOST: movie-recs-db
+      DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-botdb}
       DB_USERNAME: ${POSTGRES_USER:-botuser}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-botpass}
+      APP_NORMALIZER_BASE_URL: ${APP_NORMALIZER_BASE_URL:-http://normalizer:8083}
+      APP_NORMALIZER_TIMEOUT: ${APP_NORMALIZER_TIMEOUT:-60s}
     depends_on:
-      db:
+      movie-recs-db:
         condition: service_healthy
+      normalizer:
+        condition: service_started
     ports:
       - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
     secrets:
-      - open_api_key
-      - telegram_bot_token
-      - postgres_password
+      - movie_recs_telegram_bot_token
+    networks:
+      - monorepo-net
+
+  imdb-postgres:
+    build: ./apps/imdb-vec/docker/postgres
+    container_name: imdb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${IMDB_POSTGRES_DB:-imdb}
+      POSTGRES_USER: ${IMDB_POSTGRES_USER:-imdb}
+      POSTGRES_PASSWORD: ${IMDB_POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - imdb-pgdata:/var/lib/postgresql/data
+    ports:
+      - "${IMDB_POSTGRES_PORT:-25432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${IMDB_POSTGRES_USER:-imdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - monorepo-net
+
+  imdb-ollama:
+    image: ollama/ollama:latest
+    container_name: imdb-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
+    ports:
+      - "${IMDB_OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - imdb-ollama:/root/.ollama
+    networks:
+      - monorepo-net
+
+  imdb-vec:
+    container_name: imdb-vec
+    build:
+      context: ./apps/imdb-vec
+      dockerfile: Dockerfile
+    depends_on:
+      imdb-postgres:
+        condition: service_healthy
+      imdb-ollama:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://imdb-postgres:5432/${IMDB_POSTGRES_DB:-imdb}
+      SPRING_DATASOURCE_USERNAME: ${IMDB_POSTGRES_USER:-imdb}
+      SPRING_DATASOURCE_PASSWORD: ${IMDB_POSTGRES_PASSWORD:-changeme}
+      APP_IMDB_DATA_DIR: /data/imdb
+      APP_OLLAMA_BASE_URL: ${IMDB_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      APP_OLLAMA_HOST: ${IMDB_OLLAMA_HOST:-imdb-ollama}
+      APP_OLLAMA_PORT: ${IMDB_OLLAMA_PORT:-11434}
+      APP_ADMIN_BOOTSTRAP_TOKEN: ${IMDB_BOOTSTRAP_TOKEN:-bootstrap-token}
+    ports:
+      - "${IMDB_HTTP_PORT:-8088}:8088"
+    volumes:
+      - imdb-data:/data/imdb
+    networks:
+      - monorepo-net
+
+  imdb-mcp:
+    container_name: imdb-mcp
+    build:
+      context: ./apps/mcp-fastmcp
+      dockerfile: Dockerfile
+    depends_on:
+      imdb-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${IMDB_POSTGRES_USER:-imdb}:${IMDB_POSTGRES_PASSWORD:-changeme}@imdb-postgres:5432/${IMDB_POSTGRES_DB:-imdb}
+      OLLAMA_BASE_URL: ${IMDB_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      OLLAMA_EMBED_MODEL: ${IMDB_OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      MCP_MAX_K: ${MCP_MAX_K:-15}
+    ports:
+      - "${MCP_HTTP_PORT:-8082}:8082"
+    networks:
+      - monorepo-net
+
+  normalizer:
+    container_name: movie-normalizer
+    build:
+      context: .
+      dockerfile: apps/normalizer/Dockerfile
+    environment:
+      NORMALIZER_OLLAMA_BASE_URL: ${NORMALIZER_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      NORMALIZER_OLLAMA_DETECTION_MODEL: ${NORMALIZER_OLLAMA_DETECTION_MODEL:-llama3.1:8b-instruct-q4_0}
+      NORMALIZER_OLLAMA_TRANSLATION_MODEL: ${NORMALIZER_OLLAMA_TRANSLATION_MODEL:-llama3.1:8b-instruct-q4_0}
+      NORMALIZER_OLLAMA_TIMEOUT: ${NORMALIZER_OLLAMA_TIMEOUT:-60s}
+    env_file:
+      - ./apps/normalizer/.env
+    ports:
+      - "${NORMALIZER_HTTP_PORT:-8083}:8083"
+    restart: unless-stopped
+    networks:
+      - monorepo-net
 
 volumes:
-  dbdata:
+  movie-recs-dbdata:
+  imdb-pgdata:
+  imdb-data:
+  imdb-ollama:
 
 secrets:
-  open_api_key:
-    file: ./secrets/OPEN_API_KEY
-  telegram_bot_token:
+  movie_recs_telegram_bot_token:
     file: ./secrets/TELEGRAM_BOT_TOKEN
-  postgres_password:
-    file: ./secrets/POSTGRES_PASSWORD

@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/imdb
+    username: imdb
+    password: imdb
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.batch_size: 500
+      hibernate.order_inserts: true
+      hibernate.order_updates: true
+      hibernate.generate_statistics: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8088
+
+app:
+  imdb:
+    baseUrl: https://datasets.imdbws.com
+    files:
+      - title.basics.tsv.gz
+      - title.ratings.tsv.gz
+      - name.basics.tsv.gz
+      - title.principals.tsv.gz
+    dataDir: ./data/imdb
+    maxTitles: 10000
+  ollama:
+    baseUrl: ${APP_OLLAMA_BASE_URL:http://${APP_OLLAMA_HOST:ollama}:${APP_OLLAMA_PORT:11434}}
+    embeddingModel: nomic-embed-text
+    embeddingDims: 768
+    timeouts:
+      connectMillis: 5000
+      readMillis: 60000
+    embeddingMaxRetries: 3
+    embeddingRetryDelay: PT5S
+  admin:
+    bootstrap-token: change-me
+  recommend:
+    efSearch: 200

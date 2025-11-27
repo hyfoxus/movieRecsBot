@@ -31,6 +31,18 @@ movieRecsBot/                Monorepo root
 
 ---
 
+## Quick Setup Scripts
+
+Prefer an automated bootstrap? Use the helper scripts inside `scripts/`:
+
+- `scripts/setup_data.sh` – prompts for critical secrets, generates `.env` files, starts the IMDb data containers, and kicks off the download/embedding bootstrap (pass `--use-defaults` or `--skip-bootstrap` as needed).
+- `scripts/setup_bot.sh` – verifies the bot/MCP env files and starts the remaining services (`movie-recs-db`, `normalizer`, `imdb-mcp`, `movie-recs-bot`). Add `--build` to force image rebuilds.
+- `scripts/setup_everything.sh` – wrapper that runs the two scripts above in sequence for a full-stack setup experience.
+
+You can still run each step manually via Docker commands if you prefer fine-grained control; the scripts simply streamline the happy-path onboarding.
+
+---
+
 ## 1. Clone the Repository
 
 ```bash

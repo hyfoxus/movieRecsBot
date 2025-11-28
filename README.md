@@ -201,7 +201,3 @@ The sibling `apps/imdb-vec` service now hydrates its `movie` catalog exclusively
 Those two TSVs are small enough to download quickly yet still provide the essentials (titles, years, genres, runtime,
 adult flag, ratings, votes) that power the recommendation pipeline. Since we dropped the massive `akas`/`episode`
 datasets, their columns were removed from the schema to keep everything lean and consistent across services.
-
----
-
-Happy hacking and enjoy the movie recommendations!

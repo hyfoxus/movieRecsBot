@@ -5,8 +5,8 @@ spring:
     name: normalizer-service
 normalizer:
   ollama:
-    base-url: http://imdb-ollama:11434
-    detection-model: llama3.1:8b-instruct-q4_0
-    translation-model: llama3.1:8b-instruct-q4_0
+    base-url: ${NORMALIZER_OLLAMA_BASE_URL:http://host.docker.internal:11434}
+    detection-model: ${NORMALIZER_OLLAMA_DETECTION_MODEL:llama3.1:8b-instruct-q4_0}
+    translation-model: ${NORMALIZER_OLLAMA_TRANSLATION_MODEL:llama3.1:8b-instruct-q4_0}
     timeout: 60s
     temperature: 0.1

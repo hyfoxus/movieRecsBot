@@ -19,6 +19,7 @@ import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.htmlToP
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.sanitize;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.sanitizeAllowBasicHtml;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.stripCodeFence;
+import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.unescapeBasicHtml;
 
 @Service
 @Slf4j
@@ -86,7 +87,7 @@ public class RecommendationService {
                 context.profile(),
                 normalizedUserText,
                 UserLanguage.englishFallback());
-        String rendered = formatRecommendation(raw, parsed);
+        String rendered = unescapeBasicHtml(formatRecommendation(raw, parsed));
         dialogPolicy.reset(chatId);
         return new Reply(rendered, true);
     }

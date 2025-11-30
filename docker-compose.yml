@@ -139,7 +139,7 @@ services:
       context: .
       dockerfile: apps/normalizer/Dockerfile
     environment:
-      NORMALIZER_OLLAMA_BASE_URL: ${NORMALIZER_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      NORMALIZER_OLLAMA_BASE_URL: ${NORMALIZER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       NORMALIZER_OLLAMA_DETECTION_MODEL: ${NORMALIZER_OLLAMA_DETECTION_MODEL:-llama3.1:8b-instruct-q4_0}
       NORMALIZER_OLLAMA_TRANSLATION_MODEL: ${NORMALIZER_OLLAMA_TRANSLATION_MODEL:-llama3.1:8b-instruct-q4_0}
       NORMALIZER_OLLAMA_TIMEOUT: ${NORMALIZER_OLLAMA_TIMEOUT:-60s}

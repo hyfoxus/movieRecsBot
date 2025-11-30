@@ -86,12 +86,7 @@ public final class TelegramMessageFormatter {
                 .replace("<br />", "\n")
                 .replace("<br>", "\n");
         plain = plain.replaceAll("<[^>]+>", "");
-        return plain
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'");
+        return unescapeBasicHtml(plain);
     }
 
     public static String escapeHtml(String s) {
@@ -109,6 +104,18 @@ public final class TelegramMessageFormatter {
             }
         }
         return out.toString();
+    }
+
+    public static String unescapeBasicHtml(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return text
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
     }
 
     private static String restoreAllowedHtmlTags(String escaped) {

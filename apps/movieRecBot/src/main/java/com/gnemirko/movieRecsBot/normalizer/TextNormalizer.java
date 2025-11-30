@@ -1,5 +1,6 @@
 package com.gnemirko.movieRecsBot.normalizer;
 
+import com.gnemirko.movieRecsBot.service.TelegramMessageFormatter;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,12 +30,21 @@ public class TextNormalizer {
         if (targetLanguage == null || !targetLanguage.requiresTranslation()) {
             return englishText;
         }
-        NormalizationResponse response = client.normalize(englishText, targetLanguage.isoCode());
+        TitleProtector protector = TitleProtector.protect(englishText);
+        String payload = protector.protectedText();
+        NormalizationResponse response = client.normalize(payload, targetLanguage.isoCode());
         if (response == null || response.normalizedText() == null || response.normalizedText().isBlank()) {
             return englishText;
         }
         String cleaned = stripPromptDelimiters(response.normalizedText());
-        return cleaned == null || cleaned.isBlank() ? englishText : cleaned;
+        if (cleaned == null || cleaned.isBlank()) {
+            return englishText;
+        }
+        String restored = protector.restore(cleaned);
+        if (restored == null || restored.isBlank()) {
+            return englishText;
+        }
+        return TelegramMessageFormatter.unescapeBasicHtml(restored);
     }
 
     private static String nvl(String value, String fallback) {

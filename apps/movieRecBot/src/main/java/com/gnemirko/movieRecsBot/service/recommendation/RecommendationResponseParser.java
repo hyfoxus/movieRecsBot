@@ -58,6 +58,7 @@ public class RecommendationResponseParser {
                 List<RecommendationMovie> filtered = postFilter(parsedMovies, profile, userText);
                 result.movies = filtered;
             }
+            result.reminder = text(root.get("reminder"));
             warnIfLanguageMismatch(expectedLanguage, result.languageIso);
         } catch (Exception ex) {
             log.debug("Failed to parse LLM JSON payload: {}", ex.getMessage());
@@ -146,6 +147,7 @@ public class RecommendationResponseParser {
         private String intro = "";
         private String languageIso = "";
         private List<RecommendationMovie> movies = List.of();
+        private String reminder = "";
 
         public String intro() {
             return intro;
@@ -157,6 +159,10 @@ public class RecommendationResponseParser {
 
         public List<RecommendationMovie> movies() {
             return movies;
+        }
+
+        public String reminder() {
+            return reminder;
         }
     }
 }

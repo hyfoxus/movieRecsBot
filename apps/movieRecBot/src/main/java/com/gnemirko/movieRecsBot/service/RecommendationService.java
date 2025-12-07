@@ -27,7 +27,6 @@ import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.unescap
 public class RecommendationService {
 
     private static final String NO_MATCH_TEMPLATE = "I couldn’t find a good match. Share 1–2 favorites and I’ll suggest something similar.";
-    private static final String REMINDER_TEMPLATE = "When you watch something, send /watched with your thoughts so I can improve.";
 
     private final PromptContextBuilder promptContextBuilder;
     private final RecommendationPromptBuilder promptBuilder;
@@ -45,19 +44,14 @@ public class RecommendationService {
 
         PromptContext context = promptContextBuilder.build(chatId, normalizedUserText, language);
         String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
-        Reply englishReply = dialogPolicy.recommendNow(chatId, normalizedUserText)
+        Reply reply = dialogPolicy.recommendNow(chatId, normalizedUserText)
                 ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
                 : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
 
         userContextService.append(chatId, "User: " + normalizedUserText);
-        userContextService.append(chatId, "Bot: " + htmlToPlain(englishReply.text()));
+        userContextService.append(chatId, "Bot: " + htmlToPlain(reply.text()));
 
-        String localized = textNormalizer.translateFromEnglish(englishReply.text(), language);
-        if (!englishReply.includeReminder()) {
-            return localized;
-        }
-        String localizedReminder = translateReminder(language);
-        return appendOpinionReminder(localized, localizedReminder);
+        return appendOpinionReminder(reply.text(), reply.reminder());
     }
 
     private Reply handleClarifyingStage(long chatId,
@@ -73,23 +67,24 @@ public class RecommendationService {
             return generateRecommendation(chatId, context, normalizedUserText, userPrompt);
         }
         dialogPolicy.countClarifying(chatId);
-        return new Reply(sanitize(stripped), false);
+        return new Reply(sanitize(stripped), "");
     }
 
     private Reply generateRecommendation(long chatId,
                                          PromptContext context,
                                          String normalizedUserText,
                                          String userPrompt) {
-        String systemPrompt = promptBuilder.buildRecommendationSystemPrompt(context.language(), normalizedUserText);
+        UserLanguage language = context.language();
+        String systemPrompt = promptBuilder.buildRecommendationSystemPrompt(language, normalizedUserText);
         String raw = recommendationModelClient.call(systemPrompt, userPrompt);
         RecommendationResponseParser.ParsedResponse parsed = responseParser.parse(
                 raw,
                 context.profile(),
                 normalizedUserText,
-                UserLanguage.englishFallback());
+                language);
         String rendered = unescapeBasicHtml(formatRecommendation(raw, parsed));
         dialogPolicy.reset(chatId);
-        return new Reply(rendered, true);
+        return new Reply(rendered, parsed.reminder());
     }
 
     private String formatRecommendation(String raw,
@@ -108,18 +103,13 @@ public class RecommendationService {
         if (text == null || text.isBlank()) {
             return text;
         }
+        if (reminderText == null || reminderText.isBlank()) {
+            return text;
+        }
         String reminder = "<i>" + escapeHtml(reminderText) + "</i>";
         return text + "\n\n" + reminder;
     }
 
-    private String translateReminder(UserLanguage language) {
-        if (language == null || !language.requiresTranslation()) {
-            return REMINDER_TEMPLATE;
-        }
-        String translated = textNormalizer.translateFromEnglish(REMINDER_TEMPLATE, language);
-        return translated == null || translated.isBlank() ? REMINDER_TEMPLATE : translated;
-    }
-
-    private record Reply(String text, boolean includeReminder) {
+    private record Reply(String text, String reminder) {
     }
 }

@@ -38,12 +38,16 @@ public class RecommendationPromptBuilder {
               "intro": "short intro",
               "movies": [
                 {"title":"...", "year":1999, "reason":"...", "genres":["Fantasy","..."]}
-              ]
+              ],
+              "reminder": "localized version of '%s'"
             }
             Strictly 3–5 movies. Obey all user genre preferences and block lists. Ensure the "language" value
             exactly matches the target ISO code. If a movie exists in the CATALOG FACTS block, copy its title and
-            year exactly from there. When the catalog lacks a year, set "year": null instead of guessing.
+            year exactly from there. When the catalog lacks a year, set "year": null instead of guessing. NEVER translate
+            movie titles or years — always reuse the exact values from the catalog or IMDb even if responding in another language.
             """;
+
+    private static final String REMINDER_MESSAGE = "When you watch something, send /watched with your thoughts so I can improve.";
 
     public String buildQuestionSystemPrompt(UserLanguage language, String userText) {
         return baseSystem(language, userText) + "\n\n" + ASK_OR_RECOMMEND_PROMPT;
@@ -73,13 +77,12 @@ public class RecommendationPromptBuilder {
     }
 
     private String baseSystem(UserLanguage language, String userText) {
-        String strictness = "Always respond in English. The user's original language might be "
-                + language.displayName() + " (" + language.isoCode()
-                + "), but translation back to that language happens elsewhere. Keep official title names as stored in IMDb and never translate them.";
+        String strictness = language.directive(userText)
+                + " Preserve official movie titles and years EXACTLY as provided in the CATALOG FACTS section or IMDb; never translate or paraphrase titles.";
         return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + strictness;
     }
 
     private String jsonResponsePrompt(UserLanguage language) {
-        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted("en");
+        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted(language.isoCode(), REMINDER_MESSAGE);
     }
 }

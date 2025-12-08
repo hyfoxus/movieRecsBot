@@ -9,7 +9,7 @@
 - pray that it works ✓
 - Remake the automatic answers to certain questions, so it will be more dynamic ✓
 - Add auto-save of watched movies ✓
-- Add ability to change the AI engine
+- Add ability to change the AI engine ✓
 - Add more movies and series
 - Rewrite MCP server to Java
 - Replace /watched feature

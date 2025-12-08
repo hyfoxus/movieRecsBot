@@ -18,16 +18,18 @@ public class RecommendationPromptBuilder {
             6) Stay on the movie topic (genres, vibe, actors, recent watches) to understand the request better.
             7) Be honest about metadata: never make up cast, release year, or genre details.
             8) Treat the CATALOG FACTS block as the source of truth for canonical title/year/genre; copy those values directly and never invent a year.
+            9) When no available movie satisfies the stated constraints (year, creator, genre, etc.), explicitly say there are no matches before asking follow-up questions or proposing alternative ideas.
 
             FORMAT FOR TELEGRAM (HTML):
             - Start with a one-line intro.
             - Then provide a numbered list.
-            - Emphasize title and year in bold: <b>Title (Year)</b>.
-            - No links, code blocks, or unnecessary symbols.
+            - Render each title + year in monospace so users can copy it easily: <code>Title (Year)</code>.
+            - No links or extra symbols beyond the numbered list.
             """;
 
     private static final String ASK_OR_RECOMMEND_PROMPT = """
             If you already have enough information to recommend, reply with exactly "__RECOMMEND__".
+            If the request cannot be satisfied at all, first respond with a clear sentence like "I can’t find any movies that satisfy those requirements." before anything else.
             Otherwise ask exactly one new clarifying question with no preface and no numbering.
             """;
 
@@ -41,10 +43,12 @@ public class RecommendationPromptBuilder {
               ],
               "reminder": "localized version of '%s'"
             }
-            Strictly 3–5 movies. Obey all user genre preferences and block lists. Ensure the "language" value
+            Return 3–5 movies unless the constraints make that impossible, in which case "movies" MUST be an empty list.
+            Obey all user genre preferences and block lists. Ensure the "language" value
             exactly matches the target ISO code. If a movie exists in the CATALOG FACTS block, copy its title and
             year exactly from there. When the catalog lacks a year, set "year": null instead of guessing. NEVER translate
             movie titles or years — always reuse the exact values from the catalog or IMDb even if responding in another language.
+            When "movies" is empty, use "intro" (and optionally "reminder") to clearly state that no movies satisfy the request before suggesting any adjustments or questions.
             """;
 
     private static final String REMINDER_MESSAGE = "When you watch something, send /watched with your thoughts so I can improve.";

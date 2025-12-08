@@ -48,7 +48,6 @@ public class UpdateRouter {
                     .disableWebPagePreview(true)
                     .build();
         }
-
         return null;
     }
 }

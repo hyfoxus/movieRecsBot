@@ -44,7 +44,7 @@ public class UpdateRouter {
             String displayId = task.getDisplayId();
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
-                    .text("Дай мне пару минут!\\")
+                    .text("Дай мне пару минут!")
                     .disableWebPagePreview(true)
                     .build();
         }

@@ -22,7 +22,7 @@ class RecommendCommandHandler implements BotCommandHandler {
     public SendMessage handle(CommandContext context) {
         var task = taskManagerService.enqueue(context.chatId(), null, "дай рекомендации");
         String displayId = task.getDisplayId();
-        String text = "Дай мне пару минут!\\";
+        String text = "Дай мне пару минут!";
         return SendMessage.builder()
                 .chatId(String.valueOf(context.chatId()))
                 .text(text)

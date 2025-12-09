@@ -7,6 +7,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+import java.util.concurrent.TimeoutException;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -18,18 +21,27 @@ public class NormalizerClient {
     public NormalizationResponse normalize(String text, String targetLanguage) {
         try {
             NormalizationRequest body = new NormalizationRequest(text, targetLanguage);
-            return normalizerWebClient.post()
+            Duration timeout = properties.getTimeout();
+            NormalizationResponse response = normalizerWebClient.post()
                     .uri("/normalize")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(NormalizationResponse.class)
-                    .timeout(properties.getTimeout())
+                    .timeout(timeout)
                     .onErrorResume(ex -> {
-                        log.warn("Normalizer call failed: {}", ex.getMessage());
+                        if (ex instanceof TimeoutException) {
+                            log.warn("Normalizer call timed out after {} for target '{}'", timeout, targetLanguage);
+                        } else {
+                            log.warn("Normalizer call failed: {}", ex.getMessage());
+                        }
                         return Mono.empty();
                     })
-                    .block(properties.getTimeout());
+                    .block(timeout);
+            if (response != null) {
+                log.info("Normalizer translation succeeded for target '{}', detected='{}'", targetLanguage, response.detectedLanguage());
+            }
+            return response;
         } catch (Exception ex) {
             log.warn("Normalizer call aborted: {}", ex.getMessage());
             return null;

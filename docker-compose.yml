@@ -83,7 +83,7 @@ services:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
       OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
     ports:
-      - "${IMDB_OLLAMA_PORT:-11434}:11434"
+      - "${IMDB_OLLAMA_PORT:-11435}:11434"
     volumes:
       - imdb-ollama:/root/.ollama
     networks:

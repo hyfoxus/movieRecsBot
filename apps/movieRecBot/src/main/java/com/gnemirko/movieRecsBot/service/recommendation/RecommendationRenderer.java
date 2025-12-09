@@ -17,9 +17,9 @@ public class RecommendationRenderer {
         for (RecommendationMovie movie : parsed.movies()) {
             if (idx > 5) break;
             sb.append(idx)
-                    .append(". <b>")
+                    .append(". <code>")
                     .append(escapeHtml(TitleFormatter.formatWithVerifiedYear(stripMarkdown(nvl(movie.getTitle())), movie.getYear())))
-                    .append("</b> — ")
+                    .append("</code> — ")
                     .append(escapeHtml(stripMarkdown(nvl(movie.getReason()))))
                     .append("\n\n");
             idx++;

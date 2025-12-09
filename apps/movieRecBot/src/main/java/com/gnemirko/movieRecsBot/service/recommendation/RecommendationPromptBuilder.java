@@ -18,16 +18,19 @@ public class RecommendationPromptBuilder {
             6) Stay on the movie topic (genres, vibe, actors, recent watches) to understand the request better.
             7) Be honest about metadata: never make up cast, release year, or genre details.
             8) Treat the CATALOG FACTS block as the source of truth for canonical title/year/genre; copy those values directly and never invent a year.
+            9) Only when you are absolutely certain no existing movie satisfies the stated constraints (e.g., the catalog confirms zero matches such as “a 2023 Tarantino film”) should you say there are no matches, and that sentence must come BEFORE you ask a follow-up question or provide close alternatives. Always continue after the statement—never stop at “no matches.” Broad or seasonal prompts (e.g., “best Christmas movies”) ALWAYS have matches; never claim otherwise.
 
             FORMAT FOR TELEGRAM (HTML):
             - Start with a one-line intro.
             - Then provide a numbered list.
-            - Emphasize title and year in bold: <b>Title (Year)</b>.
-            - No links, code blocks, or unnecessary symbols.
+            - Render each title + year in monospace so users can copy it easily: <code>Title (Year)</code>.
+            - No links or extra symbols beyond the numbered list.
             """;
 
     private static final String ASK_OR_RECOMMEND_PROMPT = """
             If you already have enough information to recommend, reply with exactly "__RECOMMEND__".
+            If (and only if) the request truly cannot be satisfied by any movie, first respond with a clear sentence like "I can’t find any movies that satisfy those requirements." and THEN immediately ask exactly one new clarifying question.
+            Never use the "no matches" sentence for broad, vibe-based, or seasonal prompts (e.g., “best Christmas movies”); treat those as satisfiable.
             Otherwise ask exactly one new clarifying question with no preface and no numbering.
             """;
 
@@ -38,12 +41,18 @@ public class RecommendationPromptBuilder {
               "intro": "short intro",
               "movies": [
                 {"title":"...", "year":1999, "reason":"...", "genres":["Fantasy","..."]}
-              ]
+              ],
+              "reminder": "localized version of '%s'"
             }
-            Strictly 3–5 movies. Obey all user genre preferences and block lists. Ensure the "language" value
+            Return 3–5 movies. Even when the exact constraints cannot be satisfied, still provide the closest viable alternatives (mention why they are the nearest match) and make the intro say that no perfect matches exist before listing them.
+            Obey all user genre preferences and block lists. Ensure the "language" value
             exactly matches the target ISO code. If a movie exists in the CATALOG FACTS block, copy its title and
-            year exactly from there. When the catalog lacks a year, set "year": null instead of guessing.
+            year exactly from there. When the catalog lacks a year, set "year": null instead of guessing. NEVER translate
+            movie titles or years — always reuse the exact values from the catalog or IMDb even if responding in another language.
+            Only leave "movies" empty if it would be unsafe or dishonest to list anything at all; this should be extraordinarily rare. Never skip recommendations for broad or subjective prompts such as “best Christmas movies.”
             """;
+
+    private static final String REMINDER_MESSAGE = "When you watch something, send /watched with your thoughts so I can improve.";
 
     public String buildQuestionSystemPrompt(UserLanguage language, String userText) {
         return baseSystem(language, userText) + "\n\n" + ASK_OR_RECOMMEND_PROMPT;
@@ -73,13 +82,12 @@ public class RecommendationPromptBuilder {
     }
 
     private String baseSystem(UserLanguage language, String userText) {
-        String strictness = "Always respond in English. The user's original language might be "
-                + language.displayName() + " (" + language.isoCode()
-                + "), but translation back to that language happens elsewhere. Keep official title names as stored in IMDb and never translate them.";
+        String strictness = language.directive(userText)
+                + " Preserve official movie titles and years EXACTLY as provided in the CATALOG FACTS section or IMDb; never translate or paraphrase titles.";
         return BASE_SYSTEM + "\n\nLANGUAGE RULE:\n" + strictness;
     }
 
     private String jsonResponsePrompt(UserLanguage language) {
-        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted("en");
+        return JSON_RESPONSE_PROMPT_TEMPLATE.formatted(language.isoCode(), REMINDER_MESSAGE);
     }
 }

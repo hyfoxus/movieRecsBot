@@ -44,11 +44,10 @@ public class UpdateRouter {
             String displayId = task.getDisplayId();
             return SendMessage.builder()
                     .chatId(String.valueOf(chatId))
-                    .text("✅ Запрос принят. Задача №" + displayId + " поставлена в очередь.")
+                    .text("Дай мне пару минут!")
                     .disableWebPagePreview(true)
                     .build();
         }
-
         return null;
     }
 }

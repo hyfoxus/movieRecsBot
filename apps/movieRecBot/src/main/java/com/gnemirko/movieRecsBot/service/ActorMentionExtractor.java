@@ -24,6 +24,7 @@ public final class ActorMentionExtractor {
             "please", "пожалуйста", "или", "and", "и", "pls", "пж", "плиз"
     );
 
+
     private ActorMentionExtractor() {
     }
 

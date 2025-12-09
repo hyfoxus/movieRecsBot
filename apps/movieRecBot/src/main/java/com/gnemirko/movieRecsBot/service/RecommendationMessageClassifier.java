@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 final class RecommendationMessageClassifier {
 
     private static final Pattern NUMBERED_BOLD_PATTERN =
-            Pattern.compile("(?im)^\\s*(\\d+|[\\*-]|•)\\s*[\\.)-]?\\s*(<b>.+?</b>|\\*\\*.+?\\*\\*)");
+            Pattern.compile("(?im)^\\s*(\\d+|[\\*-]|•)\\s*[\\.)-]?\\s*(<b>.+?</b>|<code>.+?</code>|\\*\\*.+?\\*\\*)");
     private static final Pattern BASIC_TAG_PATTERN =
             Pattern.compile("(?i)</?(b|i|u|s|code|br)>");
 
@@ -23,7 +23,7 @@ final class RecommendationMessageClassifier {
         if (NUMBERED_BOLD_PATTERN.matcher(text).find()) {
             return true;
         }
-        if (countOccurrences(text, "<b>") >= 2 && text.contains("\n")) {
+        if ((countOccurrences(text, "<b>") + countOccurrences(text, "<code>")) >= 2 && text.contains("\n")) {
             return true;
         }
         return BASIC_TAG_PATTERN.matcher(text).find() && text.chars().filter(ch -> ch == '\n').count() >= 2;

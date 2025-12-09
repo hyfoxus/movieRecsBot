@@ -1,6 +1,5 @@
 package com.gnemirko.movieRecsBot.normalizer;
 
-import com.gnemirko.movieRecsBot.service.TelegramMessageFormatter;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,30 +20,6 @@ public class TextNormalizer {
         String normalized = nvl(stripPromptDelimiters(response.normalizedText()), text);
         UserLanguage language = UserLanguage.fromIsoCode(resolveDetectedIso(response.detectedLanguage()));
         return new NormalizedInput(normalized, language);
-    }
-
-    public String translateFromEnglish(String englishText, UserLanguage targetLanguage) {
-        if (englishText == null || englishText.isBlank()) {
-            return englishText;
-        }
-        if (targetLanguage == null || !targetLanguage.requiresTranslation()) {
-            return englishText;
-        }
-        TitleProtector protector = TitleProtector.protect(englishText);
-        String payload = protector.protectedText();
-        NormalizationResponse response = client.normalize(payload, targetLanguage.isoCode());
-        if (response == null || response.normalizedText() == null || response.normalizedText().isBlank()) {
-            return englishText;
-        }
-        String cleaned = stripPromptDelimiters(response.normalizedText());
-        if (cleaned == null || cleaned.isBlank()) {
-            return englishText;
-        }
-        String restored = protector.restore(cleaned);
-        if (restored == null || restored.isBlank()) {
-            return englishText;
-        }
-        return TelegramMessageFormatter.unescapeBasicHtml(restored);
     }
 
     private static String nvl(String value, String fallback) {

@@ -6,6 +6,8 @@ final class RecommendationMessageClassifier {
 
     private static final Pattern NUMBERED_BOLD_PATTERN =
             Pattern.compile("(?im)^\\s*(\\d+|[\\*-]|•)\\s*[\\.)-]?\\s*(<b>.+?</b>|<code>.+?</code>|\\*\\*.+?\\*\\*)");
+    private static final Pattern PLAIN_NUMBERED_PATTERN =
+            Pattern.compile("(?im)^\\s*\\d+\\s*[\\.)-]\\s+[^\\n]+");
     private static final Pattern BASIC_TAG_PATTERN =
             Pattern.compile("(?i)</?(b|i|u|s|code|br)>");
 
@@ -21,6 +23,9 @@ final class RecommendationMessageClassifier {
             return false;
         }
         if (NUMBERED_BOLD_PATTERN.matcher(text).find()) {
+            return true;
+        }
+        if (PLAIN_NUMBERED_PATTERN.matcher(text).find()) {
             return true;
         }
         if ((countOccurrences(text, "<b>") + countOccurrences(text, "<code>")) >= 2 && text.contains("\n")) {

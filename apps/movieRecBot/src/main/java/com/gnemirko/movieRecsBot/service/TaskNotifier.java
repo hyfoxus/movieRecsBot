@@ -18,10 +18,13 @@ class TaskNotifier {
 
     void send(SendMessage message) {
         try {
+            String logText = "HTML".equalsIgnoreCase(message.getParseMode())
+                    ? htmlToPlain(message.getText())
+                    : message.getText();
             log.info("Sending Telegram message: chatId={}, parseMode={}, text='{}'",
                     message.getChatId(),
                     message.getParseMode(),
-                    message.getText());
+                    logText);
             sender.execute(message);
         } catch (TelegramApiException e) {
             log.error("Failed to send Telegram message: {} | payload='{}'", e.getMessage(), message.getText(), e);

@@ -1,5 +1,6 @@
 package com.gnemirko.movieRecsBot.handler;
 
+import com.gnemirko.movieRecsBot.complaint.ComplaintFlowService;
 import com.gnemirko.movieRecsBot.service.OpinionService;
 import com.gnemirko.movieRecsBot.service.UserProfileService;
 import com.gnemirko.movieRecsBot.util.CmdText;
@@ -17,6 +18,7 @@ public class AwaitingReplyHandler {
     private final UserProfileService userProfileService;
     private final ProfileReplyBuilder profileReplyBuilder;
     private final OpinionService opinionService;
+    private final ComplaintFlowService complaintFlowService;
 
     public Optional<BotApiMethod<?>> handle(long chatId, String text) {
         var await = menuStateService.getAwait(chatId);
@@ -30,6 +32,7 @@ public class AwaitingReplyHandler {
             case ADD_DIRECTOR -> Optional.of(addDirectors(chatId, text));
             case ADD_BLOCK -> Optional.of(addBlocks(chatId, text));
             case ADD_OPINION -> Optional.of(opinion(chatId, text));
+            case REPORT_COMPLAINT -> Optional.of(reportComplaint(chatId, text));
             case NONE -> Optional.empty();
         };
     }
@@ -64,5 +67,9 @@ public class AwaitingReplyHandler {
             menuStateService.clear(chatId);
         }
         return result.message();
+    }
+
+    private BotApiMethod<?> reportComplaint(long chatId, String payload) {
+        return complaintFlowService.handleAwaitedComplaint(chatId, payload);
     }
 }

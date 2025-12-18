@@ -1,5 +1,7 @@
 package com.gnemirko.movieRecsBot.handler;
 
+import com.gnemirko.movieRecsBot.complaint.ReportButtonDecorator;
+import com.gnemirko.movieRecsBot.complaint.ReportIssueCallbackHandler;
 import com.gnemirko.movieRecsBot.handler.command.CommandContext;
 import com.gnemirko.movieRecsBot.handler.command.CommandDispatcher;
 import com.gnemirko.movieRecsBot.service.TaskManagerService;
@@ -14,6 +16,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 public class UpdateRouter {
 
     private final MiniMenuCallbackHandler miniMenuCallbackHandler;
+    private final ReportIssueCallbackHandler reportIssueCallbackHandler;
     private final AwaitingReplyHandler awaitingReplyHandler;
     private final CommandDispatcher commandDispatcher;
     private final TaskManagerService taskManagerService;
@@ -22,7 +25,12 @@ public class UpdateRouter {
         if (update == null) return null;
 
         if (update.hasCallbackQuery()) {
-            return miniMenuCallbackHandler.handle(update.getCallbackQuery());
+            var callbackQuery = update.getCallbackQuery();
+            String data = callbackQuery.getData();
+            if (ReportButtonDecorator.REPORT_CALLBACK_DATA.equals(data)) {
+                return reportIssueCallbackHandler.handle(callbackQuery);
+            }
+            return miniMenuCallbackHandler.handle(callbackQuery);
         }
 
         if (update.hasMessage() && update.getMessage().hasText()) {

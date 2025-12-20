@@ -184,6 +184,7 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
   ```
 - Database backups: use `docker exec -t <db-container> pg_dump ...` or your preferred tooling.
 - Queue status: inside Telegram, run `/status` to see in-flight jobs. Each job is identified by a random short ID (e.g. `DK72MZ`).
+- Bot version: run `/version` and the bot replies with its `1.x.y` version (`x` counts merge pull requests into `main`, `y` counts commits since the latest merge) alongside commit/build metadata.
 
 ---
 

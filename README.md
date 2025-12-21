@@ -84,6 +84,17 @@ cp apps/mcp-fastmcp/.env.sample apps/mcp-fastmcp/.env
 | `OPENAI_MODEL`             | Chat model identifier (default `gpt-4o-mini`).                             |
 | `MCP_BASE_URL`             | Internal URL the bot uses to talk to the MCP server (default `http://imdb-mcp:8082`). |
 
+#### Optional: Google Sheets complaint logging
+
+| Variable                          | Description                                                                                                  |
+|-----------------------------------|--------------------------------------------------------------------------------------------------------------|
+| `GOOGLE_SHEETS_ENABLED`           | Set to `true` to push every in-bot complaint to Google Sheets.                                               |
+| `GOOGLE_SHEETS_SPREADSHEET_ID`    | Target spreadsheet ID (the long ID from the sheet URL).                                                      |
+| `GOOGLE_SHEETS_RANGE`             | Range that receives complaints (default `Complaints!A:C`, assuming headers `User`, `Complaint`, `To what`).  |
+| `GOOGLE_SHEETS_CREDENTIALS_PATH`  | Filesystem path to a service-account JSON (works great with Docker secrets).                                 |
+| `GOOGLE_SHEETS_CREDENTIALS_JSON`  | Alternative: inline JSON payload instead of a file (leave blank when using the path option).                 |
+
+.env tip: define either the `*_PATH` or the `*_JSON` variant—the bot refuses to boot if neither is provided while logging is enabled.
 ### Key variables (MCP server)
 
 | Variable             | Description                                                                 |
@@ -173,6 +184,7 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
   ```
 - Database backups: use `docker exec -t <db-container> pg_dump ...` or your preferred tooling.
 - Queue status: inside Telegram, run `/status` to see in-flight jobs. Each job is identified by a random short ID (e.g. `DK72MZ`).
+- Bot version: run `/version` and the bot replies with its `1.x.y` version (`x` counts merge pull requests into `main`, `y` counts commits since the latest merge) alongside commit/build metadata.
 
 ---
 
@@ -184,6 +196,16 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 | Database connection failures                 | Confirm `POSTGRES_PASSWORD` in `apps/movieRecBot/.env` matches the password stored inside PostgreSQL (alter it or recreate the volume if needed). |
 | Webhook warnings on startup                  | Ensure `TELEGRAM_WEBHOOK_URL` (and public endpoint) is set; rerun if the URL changes.                 |
 | Stuck tasks in `/status`                     | Restart the stack—pending jobs resume on boot and completed jobs are purged automatically.           |
+
+---
+
+## Reporting Issues from Telegram
+
+- Every bot-authored message now carries a `⚠️ Сообщить о проблеме` inline button. Tapping it opens a short prompt that collects the complaint and links it to the originating message automatically.
+- Users can also send the `/report` command manually. Use it as a reply to a specific message to copy that text into the “To what” column, or send `/report your text…` to log a general complaint.
+- Complaints are appended to a Google Sheet when `GOOGLE_SHEETS_ENABLED=true`. Create a service account, share the sheet with that account (read/write), and expose its JSON key either via `GOOGLE_SHEETS_CREDENTIALS_PATH` (preferred with Docker secrets) or `GOOGLE_SHEETS_CREDENTIALS_JSON`.
+- The sheet should provide three header columns: `User`, `Complaint`, `To what`. You can change the destination range via `GOOGLE_SHEETS_RANGE` if you use a different layout.
+- If Google Sheets logging stays disabled, complaints are still captured in application logs so nothing is silently dropped.
 
 ---
 

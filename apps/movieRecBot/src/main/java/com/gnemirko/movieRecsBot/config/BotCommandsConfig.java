@@ -61,7 +61,9 @@ public class BotCommandsConfig {
                         new BotCommand("/unblock", "Убрать метку из любого списка"),
                         new BotCommand("/reset_profile", "Очистить профиль"),
                         new BotCommand("/help", "Краткая справка"),
-                        new BotCommand("/menu", "Меню профиля")
+                        new BotCommand("/menu", "Меню профиля"),
+                        new BotCommand("/report", "Сообщить о проблеме"),
+                        new BotCommand("/version", "Показать версию бота")
                 );
 
                 bot.execute(SetMyCommands.builder()

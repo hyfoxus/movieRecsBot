@@ -1,5 +1,6 @@
 package com.gnemirko.movieRecsBot.controller;
 
+import com.gnemirko.movieRecsBot.complaint.ReportButtonDecorator;
 import com.gnemirko.movieRecsBot.handler.UpdateRouter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
 @Slf4j
@@ -16,6 +18,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 public class WebhookController {
 
     private final UpdateRouter router;
+    private final ReportButtonDecorator reportButtonDecorator;
 
     @PostMapping(path = {"${telegram.bot.webhook-path}", "${telegram.bot.webhook-path}/"})
     public BotApiMethod<?> onUpdate(@RequestBody Update update) {
@@ -38,6 +41,9 @@ public class WebhookController {
             }
 
             BotApiMethod<?> response = router.handle(update);
+            if (response instanceof SendMessage sendMessage) {
+                reportButtonDecorator.decorate(sendMessage);
+            }
             if (response == null) {
                 log.info("No response generated for update id={}", update.getUpdateId());
             } else {

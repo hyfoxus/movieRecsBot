@@ -1,6 +1,8 @@
 spring:
   application:
     name: movieRecsBot
+  config:
+    import: classpath:prompts.yml
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:}
@@ -21,6 +23,15 @@ logging:
   level:
     root: INFO
     com.gnemirko.movieRecsBot: DEBUG
+
+google:
+  sheets:
+    enabled: ${GOOGLE_SHEETS_ENABLED:false}
+    spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID:}
+    credentials-path: ${GOOGLE_SHEETS_CREDENTIALS_PATH:}
+    credentials-json: ${GOOGLE_SHEETS_CREDENTIALS_JSON:}
+    range: ${GOOGLE_SHEETS_RANGE:Complaints!A:C}
+    application-name: ${GOOGLE_SHEETS_APP_NAME:movieRecsBot}
 
 app:
   mcp:

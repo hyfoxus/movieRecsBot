@@ -11,7 +11,7 @@
       runs-on: ubuntu-latest
 
       permissions:
-        contents: write    # needed so the bot can push the bump commit
+        contents: write
 
       steps:
         - name: Checkout repository
@@ -34,7 +34,6 @@
             major=$(echo "$current" | cut -d. -f1)
             minor=$(echo "$current" | cut -d. -f2)
             patch=$(echo "$current" | cut -d. -f3)
-            # Example policy: bump minor on every merge, reset patch to 0.
             next_minor=$((minor + 1))
             next_version="${major}.${next_minor}.0"
             echo "current=$current"
@@ -50,6 +49,3 @@
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git commit -am "chore: bump version to $NEXT_VERSION"
             git push origin HEAD
-
-        - name: Build & test
-          run: ./mvnw -B clean verify

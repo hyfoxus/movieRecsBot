@@ -184,7 +184,8 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
   ```
 - Database backups: use `docker exec -t <db-container> pg_dump ...` or your preferred tooling.
 - Queue status: inside Telegram, run `/status` to see in-flight jobs. Each job is identified by a random short ID (e.g. `DK72MZ`).
-- Bot version: run `/version` and the bot replies with its `1.x.y` version (`x` counts merge pull requests into `main`, `y` counts commits since the latest merge) alongside commit/build metadata.
+- Bot version: run `/version` to see the semantic version stored in `pom.xml` plus commit/build metadata (CI bumps it after each merge to `main`).
+  The `<version>` field in the root `pom.xml` (currently `1.4.0`) is the single source of truth, so your pipeline only needs to bump that value after merges to `main` or `chore/monorepo-conversion`.
 
 ---
 

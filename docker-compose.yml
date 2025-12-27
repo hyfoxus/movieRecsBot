@@ -124,10 +124,12 @@ services:
       imdb-postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg://${IMDB_POSTGRES_USER:-imdb}:${IMDB_POSTGRES_PASSWORD:-changeme}@imdb-postgres:5432/${IMDB_POSTGRES_DB:-imdb}
-      OLLAMA_BASE_URL: ${IMDB_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
-      OLLAMA_EMBED_MODEL: ${IMDB_OLLAMA_EMBED_MODEL:-nomic-embed-text}
-      MCP_MAX_K: ${MCP_MAX_K:-15}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://imdb-postgres:5432/${IMDB_POSTGRES_DB:-imdb}
+      SPRING_DATASOURCE_USERNAME: ${IMDB_POSTGRES_USER:-imdb}
+      SPRING_DATASOURCE_PASSWORD: ${IMDB_POSTGRES_PASSWORD:-changeme}
+      SPRING_AI_OLLAMA_BASE_URL: ${IMDB_OLLAMA_BASE_URL:-http://imdb-ollama:11434}
+      SPRING_AI_OLLAMA_EMBEDDING_MODEL: ${IMDB_OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      APP_MCP_MAX_RESULTS: ${MCP_MAX_K:-15}
     ports:
       - "${MCP_HTTP_PORT:-8082}:8082"
     networks:

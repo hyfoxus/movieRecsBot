@@ -5,12 +5,11 @@ usage() {
   cat <<'EOF'
 Usage: scripts/setup_data.sh [options]
 
-Bootstraps the IMDb data stack: generates .env files, stores the Telegram token
+Bootstraps the IMDb data stack: verifies .env files, stores the Telegram token
 as a Docker secret, starts the imdb-* services, and triggers the bootstrap job
 that downloads IMDb data and backfills embeddings.
 
 Options:
-  --use-defaults        Reuse existing values/non-interactive defaults for .env files.
   --skip-bootstrap      Start containers but skip calling the bootstrap HTTP endpoint.
   --no-rebuild-index    Trigger bootstrap without rebuilding the HNSW index.
   -h, --help            Show this help message.
@@ -29,6 +28,14 @@ info() {
 fatal() {
   echo "[setup-data] ERROR: $*" >&2
   exit 1
+}
+
+require_file() {
+  local path="$1"
+  local label="$2"
+  if [[ ! -f "$path" ]]; then
+    fatal "Missing ${label} (${path}). Copy the matching .env.sample and edit it before rerunning."
+  fi
 }
 
 ensure_cmd() {
@@ -88,19 +95,15 @@ wait_for_http() {
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_SCRIPT="$ROOT_DIR/scripts/bootstrap_env.py"
 TELEGRAM_SECRET_PATH="$ROOT_DIR/secrets/TELEGRAM_BOT_TOKEN"
+BOT_ENV="$ROOT_DIR/apps/movieRecBot/.env"
+MCP_ENV="$ROOT_DIR/apps/mcp-fastmcp/.env"
 
-USE_DEFAULTS=0
 SKIP_BOOTSTRAP=0
 REBUILD_INDEX=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --use-defaults)
-      USE_DEFAULTS=1
-      shift
-      ;;
     --skip-bootstrap)
       SKIP_BOOTSTRAP=1
       shift
@@ -119,17 +122,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-ensure_cmd python3
 ensure_cmd curl
 ensure_cmd docker
 detect_compose
 
-info "Generating environment files via bootstrap_env.py"
-ENV_ARGS=()
-if (( USE_DEFAULTS )); then
-  ENV_ARGS+=(--use-defaults)
-fi
-python3 "$ENV_SCRIPT" "${ENV_ARGS[@]}"
+require_file "$BOT_ENV" "bot .env file"
+require_file "$MCP_ENV" "MCP .env file"
 
 mkdir -p "$(dirname "$TELEGRAM_SECRET_PATH")"
 if [[ -f "$TELEGRAM_SECRET_PATH" ]]; then

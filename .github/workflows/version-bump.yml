@@ -138,64 +138,67 @@ jobs:
             -DgenerateBackupPoms=false
 
       - name: Update module versions (only if module declares its own <project><version>)
-  run: |
-    set -euo pipefail
+        run: |
+          set -euo pipefail
 
-    increment_version() {
-      local version="$1"
-      local mode="$2"
-      local base="${version%%-*}"
-      local suffix=""
-      [[ "$version" == *"-"* ]] && suffix="-${version#*-}"
-      IFS='.' read -r major minor patch <<< "$base"
-      major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
-      if [[ "$mode" == "patch" ]]; then
-        patch=$((patch + 1))
-      else
-        minor=$((minor + 1)); patch=0
-      fi
-      echo "${major}.${minor}.${patch}${suffix}"
-    }
+          increment_version() {
+            local version="$1"
+            local mode="$2"
+            local base="${version%%-*}"
+            local suffix=""
+            [[ "$version" == *"-"* ]] && suffix="-${version#*-}"
+            IFS='.' read -r major minor patch <<< "$base"
+            major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
+            if [[ "$mode" == "patch" ]]; then
+              patch=$((patch + 1))
+            else
+              minor=$((minor + 1)); patch=0
+            fi
+            echo "${major}.${minor}.${patch}${suffix}"
+          }
 
-    has_direct_project_version() {
-      local pom="$1"
-      python3 - "$pom" <<'PY'
-import sys, xml.etree.ElementTree as ET
-pom = sys.argv[1]
-root = ET.parse(pom).getroot()
+          # Returns 0 if pom has a direct <project><version> (not parent/dependency/plugin versions)
+          has_direct_project_version() {
+            local pom="$1"
+            # Strip the <parent>...</parent> block, then check ONLY for a <version> directly under <project>
+            # This is a pragmatic check that avoids XML tools/heredocs in YAML.
+            local stripped
+            stripped="$(perl -0777 -pe 's|<parent>.*?</parent>||sg' "$pom")"
+            # Look for <project> ... <version> ... before hitting another top-level element like <artifactId>, <dependencies>, etc.
+            # (good enough for standard Maven POM layout)
+            echo "$stripped" | grep -Pzoq '(?s)<project[^>]*>\s*(?:<modelVersion>.*?</modelVersion>\s*)?(?:<groupId>.*?</groupId>\s*)?(?:<artifactId>.*?</artifactId>\s*)?<version>\s*[^<]+\s*</version>'
+          }
 
-def lname(tag):
-    return tag.split('}', 1)[1] if '}' in tag else tag
+          META_FILE="$VERSION_META_FILE"
+          if [[ ! -s "$META_FILE" ]]; then
+            echo "Version metadata file missing" >&2
+            exit 1
+          fi
 
-# Only count <version> that is a direct child of <project>
-direct = [c for c in list(root) if lname(c.tag) == 'version']
-print("true" if direct else "false")
-PY
-    }
+          mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
 
-    META_FILE="$VERSION_META_FILE"
-    mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
+          for name in "${modules[@]}"; do
+            path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
+            current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
+            changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
+            pom="$path/pom.xml"
 
-    for name in "${modules[@]}"; do
-      path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
-      current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
-      changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
-      pom="$path/pom.xml"
+            if ! has_direct_project_version "$pom"; then
+              echo "Skipping $name ($path): version is inherited from parent."
+              continue
+            fi
 
-      if [[ "$(has_direct_project_version "$pom")" != "true" ]]; then
-        echo "Skipping $name ($path): version is inherited from parent."
-        continue
-      fi
+            if [[ "$changed" == "true" ]]; then
+              next=$(increment_version "$current" "$BUMP_KIND")
+            else
+              next="$current"
+            fi
 
-      if [[ "$changed" == "true" ]]; then
-        next=$(increment_version "$current" "$BUMP_KIND")
-      else
-        next="$current"
-      fi
-
-      echo "Setting $name ($path) version -> $next (changed=$changed)"
-      mvn -B -f "$pom" versions:set -DnewVersion="$next" -DgenerateBackupPoms=false
-    done
+            echo "Setting $name ($path) version -> $next (changed=$changed)"
+            mvn -B -f "$pom" versions:set \
+              -DnewVersion="$next" \
+              -DgenerateBackupPoms=false
+          done
 
       - name: Commit and push bump
         run: |

@@ -1,4 +1,4 @@
-  name: Auto Bump Version
+name: Auto Bump Version
 
   on:
     push:
@@ -92,7 +92,13 @@
               if git diff --quiet "$BASE_SHA" HEAD -- "$dir"; then
                 changed=false
               else
-                changed=true
+                status=$?
+                if [[ "$status" -eq 1 ]]; then
+                  changed=true
+                else
+                  echo "git diff returned status $status for $dir; treating as changed." >&2
+                  changed=true
+                fi
               fi
               if [[ "$idx" -lt "$last" ]]; then
                 comma=","
@@ -164,3 +170,4 @@
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git commit -am "chore: bump versions (${GITHUB_REF_NAME}) to $ROOT_NEXT_VERSION"
+            git push origin HEAD

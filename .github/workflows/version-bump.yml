@@ -89,16 +89,15 @@
               name="${module_names[$idx]}"
               dir="${module_dirs[$idx]}"
               current=$(mvn -q -pl "$dir" help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
-              if git diff --quiet "$BASE_SHA" HEAD -- "$dir"; then
-                changed=false
-              else
-                status=$?
-                if [[ "$status" -eq 1 ]]; then
+              if diff_output=$(git diff --name-only "$BASE_SHA" HEAD -- "$dir" 2>&1); then
+                if [[ -n "$diff_output" ]]; then
                   changed=true
                 else
-                  echo "git diff returned status $status for $dir; treating as changed." >&2
-                  changed=true
+                  changed=false
                 fi
+              else
+                echo "git diff failed for $dir (treating as changed): $diff_output" >&2
+                changed=true
               fi
               if [[ "$idx" -lt "$last" ]]; then
                 comma=","

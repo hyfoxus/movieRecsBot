@@ -23,7 +23,7 @@
         <module>apps/movieRecBot</module>
         <module>apps/imdb-vec</module>
         <module>apps/normalizer</module>
-        <module>apps/mcp-fastmcp</module>
+        <module>apps/movie-mcp-server</module>
     </modules>
 
     <properties>

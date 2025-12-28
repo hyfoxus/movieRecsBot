@@ -37,8 +37,13 @@
               local mode="$2"
               IFS='.' read -r major minor patch <<< "$version"
               case "$mode" in
-                patch) patch=$((patch + 1)) ;;
-                *)     minor=$((minor + 1)); patch=0 ;;
+                patch)
+                  patch=$((patch + 1))
+                  ;;
+                *)
+                  minor=$((minor + 1))
+                  patch=0
+                  ;;
               esac
               echo "${major}.${minor}.${patch}"
             }
@@ -51,7 +56,7 @@
             fi
             echo "BUMP_KIND=$BUMP_KIND" >> "$GITHUB_ENV"
 
-            ROOT_CURRENT=$(mvn -q -Dexec.executable='echo' -Dexec.args='${project.version}' --non-recursive exec:exec | tr -d '\r' | tail -n1)
+            ROOT_CURRENT=$(mvn -q -N help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
             ROOT_NEXT=$(increment_version "$ROOT_CURRENT" "$BUMP_KIND")
             echo "ROOT_NEXT_VERSION=$ROOT_NEXT" >> "$GITHUB_ENV"
 
@@ -59,13 +64,6 @@
             if [[ -z "$BASE_SHA" || "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
               BASE_SHA=$(git rev-list --max-parents=0 HEAD)
             fi
-
-            declare -A MODULE_DIRS=(
-              [movieRecBot]="apps/movieRecBot"
-              [imdbvec]="apps/imdb-vec"
-              [normalizer]="apps/normalizer"
-              [movie-mcp-server]="apps/movie-mcp-server"
-            )
 
             TMP_FILE=$(mktemp)
             {
@@ -76,11 +74,12 @@
             } > "$TMP_FILE"
 
             module_names=(movieRecBot imdbvec normalizer movie-mcp-server)
+            module_dirs=(apps/movieRecBot apps/imdb-vec apps/normalizer apps/movie-mcp-server)
             last=$(( ${#module_names[@]} - 1 ))
             for idx in "${!module_names[@]}"; do
               name="${module_names[$idx]}"
-              dir="${MODULE_DIRS[$name]}"
-              current=$(mvn -q -pl "$dir" -Dexec.executable='echo' -Dexec.args='${project.version}' --non-recursive exec:exec | tr -d '\r' | tail -n1)
+              dir="${module_dirs[$idx]}"
+              current=$(mvn -q -pl "$dir" help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
               if git diff --quiet "$BASE_SHA" HEAD -- "$dir"; then
                 changed=false
               else
@@ -135,16 +134,16 @@
 
             mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
             for name in "${modules[@]}"; do
-              path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
-              current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
-              changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
-              if [[ "$changed" == "true" ]]; then
-                next=$(increment_version "$current" "$BUMP_KIND")
-              else
-                next="$current"
-              fi
-              echo "Setting $name ($path) version -> $next (changed=$changed)"
-              mvn -B -pl "$path" versions:set -DnewVersion="$next" -DprocessAllModules=false -DgenerateBackupPoms=false
+               path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
+               current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
+               changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
+               if [[ "$changed" == "true" ]]; then
+                 next=$(increment_version "$current" "$BUMP_KIND")
+               else
+                 next="$current"
+               fi
+               echo "Setting $name ($path) version -> $next (changed=$changed)"
+               mvn -B -pl "$path" versions:set -DnewVersion="$next" -DprocessAllModules=false -DgenerateBackupPoms=false
             done
 
         - name: Commit and push bump

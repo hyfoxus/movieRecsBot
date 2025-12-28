@@ -60,10 +60,19 @@
             ROOT_NEXT=$(increment_version "$ROOT_CURRENT" "$BUMP_KIND")
             echo "ROOT_NEXT_VERSION=$ROOT_NEXT" >> "$GITHUB_ENV"
 
-            BASE_SHA="${{ github.event.before }}"
-            if [[ -z "$BASE_SHA" || "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
-              BASE_SHA=$(git rev-list --max-parents=0 HEAD)
+            BASE_SHA_INPUT="${{ github.event.before }}"
+            if [[ -z "$BASE_SHA_INPUT" || "$BASE_SHA_INPUT" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA_FALLBACK=$(git rev-parse HEAD^ 2>/dev/null || { git rev-list --max-parents=0 HEAD | tail -n1; })
+              BASE_SHA="$BASE_SHA_FALLBACK"
+            else
+              if git cat-file -e "${BASE_SHA_INPUT}^{commit}" >/dev/null 2>&1; then
+                BASE_SHA="$BASE_SHA_INPUT"
+              else
+                echo "Base commit ${BASE_SHA_INPUT} missing locally. Falling back to previous commit." >&2
+                BASE_SHA=$(git rev-parse HEAD^ 2>/dev/null || { git rev-list --max-parents=0 HEAD | tail -n1; })
+              fi
             fi
+            echo "BASE_SHA=$BASE_SHA"
 
             TMP_FILE=$(mktemp)
             {
@@ -134,16 +143,16 @@
 
             mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
             for name in "${modules[@]}"; do
-               path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
-               current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
-               changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
-               if [[ "$changed" == "true" ]]; then
-                 next=$(increment_version "$current" "$BUMP_KIND")
-               else
-                 next="$current"
-               fi
-               echo "Setting $name ($path) version -> $next (changed=$changed)"
-               mvn -B -pl "$path" versions:set -DnewVersion="$next" -DprocessAllModules=false -DgenerateBackupPoms=false
+              path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
+              current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
+              changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
+              if [[ "$changed" == "true" ]]; then
+                next=$(increment_version "$current" "$BUMP_KIND")
+              else
+                next="$current"
+              fi
+              echo "Setting $name ($path) version -> $next (changed=$changed)"
+              mvn -B -pl "$path" versions:set -DnewVersion="$next" -DprocessAllModules=false -DgenerateBackupPoms=false
             done
 
         - name: Commit and push bump
@@ -155,4 +164,3 @@
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git commit -am "chore: bump versions (${GITHUB_REF_NAME}) to $ROOT_NEXT_VERSION"
-            git push origin HEAD

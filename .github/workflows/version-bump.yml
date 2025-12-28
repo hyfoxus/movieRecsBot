@@ -137,56 +137,65 @@ jobs:
             -DnewVersion="$ROOT_NEXT_VERSION" \
             -DgenerateBackupPoms=false
 
-      - name: Update module versions (only if module declares its own <version>)
-        run: |
-          set -euo pipefail
+      - name: Update module versions (only if module declares its own <project><version>)
+  run: |
+    set -euo pipefail
 
-          increment_version() {
-            local version="$1"
-            local mode="$2"
-            local base="${version%%-*}"
-            local suffix=""
-            [[ "$version" == *"-"* ]] && suffix="-${version#*-}"
-            IFS='.' read -r major minor patch <<< "$base"
-            major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
-            if [[ "$mode" == "patch" ]]; then
-              patch=$((patch + 1))
-            else
-              minor=$((minor + 1)); patch=0
-            fi
-            echo "${major}.${minor}.${patch}${suffix}"
-          }
+    increment_version() {
+      local version="$1"
+      local mode="$2"
+      local base="${version%%-*}"
+      local suffix=""
+      [[ "$version" == *"-"* ]] && suffix="-${version#*-}"
+      IFS='.' read -r major minor patch <<< "$base"
+      major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
+      if [[ "$mode" == "patch" ]]; then
+        patch=$((patch + 1))
+      else
+        minor=$((minor + 1)); patch=0
+      fi
+      echo "${major}.${minor}.${patch}${suffix}"
+    }
 
-          has_explicit_version() {
-            local pom="$1"
-            perl -0777 -pe 's|<parent>.*?</parent>||sg' "$pom" | grep -q "<version>"
-          }
+    has_direct_project_version() {
+      local pom="$1"
+      python3 - "$pom" <<'PY'
+import sys, xml.etree.ElementTree as ET
+pom = sys.argv[1]
+root = ET.parse(pom).getroot()
 
-          META_FILE="$VERSION_META_FILE"
-          mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
+def lname(tag):
+    return tag.split('}', 1)[1] if '}' in tag else tag
 
-          for name in "${modules[@]}"; do
-            path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
-            current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
-            changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
+# Only count <version> that is a direct child of <project>
+direct = [c for c in list(root) if lname(c.tag) == 'version']
+print("true" if direct else "false")
+PY
+    }
 
-            pom="$path/pom.xml"
-            if ! has_explicit_version "$pom"; then
-              echo "Skipping $name ($path): version is inherited from parent."
-              continue
-            fi
+    META_FILE="$VERSION_META_FILE"
+    mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
 
-            if [[ "$changed" == "true" ]]; then
-              next=$(increment_version "$current" "$BUMP_KIND")
-            else
-              next="$current"
-            fi
+    for name in "${modules[@]}"; do
+      path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
+      current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
+      changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
+      pom="$path/pom.xml"
 
-            echo "Setting $name ($path) version -> $next (changed=$changed)"
-            mvn -B -f "$pom" versions:set \
-              -DnewVersion="$next" \
-              -DgenerateBackupPoms=false
-          done
+      if [[ "$(has_direct_project_version "$pom")" != "true" ]]; then
+        echo "Skipping $name ($path): version is inherited from parent."
+        continue
+      fi
+
+      if [[ "$changed" == "true" ]]; then
+        next=$(increment_version "$current" "$BUMP_KIND")
+      else
+        next="$current"
+      fi
+
+      echo "Setting $name ($path) version -> $next (changed=$changed)"
+      mvn -B -f "$pom" versions:set -DnewVersion="$next" -DgenerateBackupPoms=false
+    done
 
       - name: Commit and push bump
         run: |

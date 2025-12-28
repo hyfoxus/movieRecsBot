@@ -157,24 +157,17 @@ jobs:
             echo "${major}.${minor}.${patch}${suffix}"
           }
 
-          # Returns 0 if pom has a direct <project><version> (not parent/dependency/plugin versions)
+          # prints "true"/"false" – checks ONLY <project><version> (direct child), namespace-safe
           has_direct_project_version() {
-            local pom="$1"
-            # Strip the <parent>...</parent> block, then check ONLY for a <version> directly under <project>
-            # This is a pragmatic check that avoids XML tools/heredocs in YAML.
-            local stripped
-            stripped="$(perl -0777 -pe 's|<parent>.*?</parent>||sg' "$pom")"
-            # Look for <project> ... <version> ... before hitting another top-level element like <artifactId>, <dependencies>, etc.
-            # (good enough for standard Maven POM layout)
-            echo "$stripped" | grep -Pzoq '(?s)<project[^>]*>\s*(?:<modelVersion>.*?</modelVersion>\s*)?(?:<groupId>.*?</groupId>\s*)?(?:<artifactId>.*?</artifactId>\s*)?<version>\s*[^<]+\s*</version>'
+            python3 -c 'import sys, xml.etree.ElementTree as ET
+          pom=sys.argv[1]
+          root=ET.parse(pom).getroot()
+
+          def lname(t): return t.split("}",1)[1] if "}" in t else t
+          print("true" if any(lname(c.tag)=="version" for c in list(root)) else "false")' "$1"
           }
 
           META_FILE="$VERSION_META_FILE"
-          if [[ ! -s "$META_FILE" ]]; then
-            echo "Version metadata file missing" >&2
-            exit 1
-          fi
-
           mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
 
           for name in "${modules[@]}"; do
@@ -183,7 +176,7 @@ jobs:
             changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
             pom="$path/pom.xml"
 
-            if ! has_direct_project_version "$pom"; then
+            if [[ "$(has_direct_project_version "$pom")" != "true" ]]; then
               echo "Skipping $name ($path): version is inherited from parent."
               continue
             fi
@@ -195,9 +188,21 @@ jobs:
             fi
 
             echo "Setting $name ($path) version -> $next (changed=$changed)"
-            mvn -B -f "$pom" versions:set \
-              -DnewVersion="$next" \
-              -DgenerateBackupPoms=false
+
+            # Try to set; if Maven still says "inherited from parent", skip without failing the job.
+            set +e
+            out=$(mvn -B -f "$pom" versions:set -DnewVersion="$next" -DgenerateBackupPoms=false 2>&1)
+            code=$?
+            set -e
+
+            if [[ $code -ne 0 ]]; then
+              if echo "$out" | grep -q "Project version is inherited from parent"; then
+                echo "Skipping $name ($path): Maven reports version is inherited from parent."
+                continue
+              fi
+              echo "$out"
+              exit $code
+            fi
           done
 
       - name: Commit and push bump

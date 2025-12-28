@@ -21,10 +21,9 @@ movieRecsBot/                Monorepo root
 ├─ apps/movieRecBot/         Spring Boot application (bot service)
 │  ├─ src/                   Java sources & resources
 │  └─ .env.sample            Template for bot-specific environment variables
-├─ apps/mcp-fastmcp/.env.sample Template for the FastMCP server env vars
+├─ apps/mcp-fastmcp/.env.sample Template for the Spring MCP server env vars
 ├─ docker-compose.yml        Local stack (bot + PostgreSQL + MCP dependencies)
 ├─ docker/entrypoint.sh      Secret loader used inside the runtime image
-├─ scripts/bootstrap_env.py  Helper to generate all .env files at once
 ├─ secrets/                  Directory for Docker secrets (you create the files)
 └─ README.md                 This guide
 ```
@@ -35,7 +34,7 @@ movieRecsBot/                Monorepo root
 
 Prefer an automated bootstrap? Use the helper scripts inside `scripts/`:
 
-- `scripts/setup_data.sh` – prompts for critical secrets, generates `.env` files, starts the IMDb data containers, and kicks off the download/embedding bootstrap (pass `--use-defaults` or `--skip-bootstrap` as needed).
+- `scripts/setup_data.sh` – verifies your `.env` files, captures the Telegram token secret, starts the IMDb data containers, and kicks off the download/embedding bootstrap (pass `--skip-bootstrap` or `--no-rebuild-index` as needed).
 - `scripts/setup_bot.sh` – verifies the bot/MCP env files and starts the remaining services (`movie-recs-db`, `normalizer`, `imdb-mcp`, `movie-recs-bot`). Add `--build` to force image rebuilds.
 - `scripts/setup_everything.sh` – wrapper that runs the two scripts above in sequence for a full-stack setup experience.
 
@@ -54,21 +53,14 @@ cd movieRecsBot
 
 ## 2. Configure Environment Variables
 
-The repo now ships with a helper that populates every `.env` file (bot + MCP) in one go:
-
-```bash
-python scripts/bootstrap_env.py
-```
-
-You will be prompted once for the values that matter (Telegram webhook URL, OpenAI key, database creds, Ollama endpoint, etc.). The script writes the answers into `apps/movieRecBot/.env` (bot) and `apps/mcp-fastmcp/.env` (MCP) so every service gets what it needs without repeated editing.  
-Re-run the script at any time; existing values are used as defaults. Use `--use-defaults` for non-interactive environments.
-
-Prefer editing manually? Copy the provided samples:
+Copy the provided samples and edit them with your deployment-specific values:
 
 ```bash
 cp apps/movieRecBot/.env.sample apps/movieRecBot/.env
 cp apps/mcp-fastmcp/.env.sample apps/mcp-fastmcp/.env
 ```
+
+Open both `.env` files in your editor and set the values described below (Telegram webhook URL, database credentials, OpenAI key, Ollama endpoint, etc.). The setup scripts simply verify these files exist—they no longer auto-populate them.
 
 ### Key variables (bot)
 
@@ -97,12 +89,14 @@ cp apps/mcp-fastmcp/.env.sample apps/mcp-fastmcp/.env
 .env tip: define either the `*_PATH` or the `*_JSON` variant—the bot refuses to boot if neither is provided while logging is enabled.
 ### Key variables (MCP server)
 
-| Variable             | Description                                                                 |
-|----------------------|-----------------------------------------------------------------------------|
-| `DATABASE_URL`       | SQLAlchemy-style URI for the IMDb vector database (pgvector).               |
-| `OLLAMA_BASE_URL`    | URL for the Ollama instance that serves embeddings (default `http://imdb-ollama:11434`). |
-| `OLLAMA_EMBED_MODEL` | Embedding model identifier pulled into Ollama (default `nomic-embed-text`). |
-| `MCP_MAX_K`          | Maximum number of movie rows returned to the bot per query.                 |
+| Variable                          | Description                                                                 |
+|-----------------------------------|-----------------------------------------------------------------------------|
+| `SPRING_DATASOURCE_URL`           | JDBC URL for the IMDb pgvector database (e.g. `jdbc:postgresql://imdb-postgres:5432/imdb`). |
+| `SPRING_DATASOURCE_USERNAME/PASSWORD` | Credentials for the database above.                                           |
+| `SPRING_AI_OLLAMA_BASE_URL`       | URL for the Ollama instance that serves embeddings (default `http://imdb-ollama:11434`). |
+| `SPRING_AI_OLLAMA_EMBEDDING_MODEL`| Embedding model identifier pulled into Ollama (default `nomic-embed-text`). |
+| `APP_MCP_MAX_RESULTS`             | Upper bound on search results returned to clients.                          |
+| `APP_MCP_NAME/VERSION/DESCRIPTION`| Optional metadata advertised via `/.well-known/mcp.json`.                   |
 
 `.env` files are ignored by Git, so it is safe to keep local DB passwords there. Treat the OpenAI key as sensitive—prefer CI/CD secret stores or environment injection when deploying.
 
@@ -185,7 +179,7 @@ Ensure Telegram can reach `http://localhost:8080/<TELEGRAM_BOT_WEBHOOK_PATH>` by
 - Database backups: use `docker exec -t <db-container> pg_dump ...` or your preferred tooling.
 - Queue status: inside Telegram, run `/status` to see in-flight jobs. Each job is identified by a random short ID (e.g. `DK72MZ`).
 - Bot version: run `/version` to see the semantic version stored in `pom.xml` plus commit/build metadata (CI bumps it after each merge to `main`).
-  The `<version>` field in the root `pom.xml` (currently `1.4.0`) is the single source of truth, so your pipeline only needs to bump that value after merges to `main` or `chore/monorepo-conversion`.
+  The `<version>` field in the root `pom.xml` (currently `1.5.0`) is the single source of truth, so your pipeline only needs to bump that value after merges to `main` or `chore/monorepo-conversion`.
 
 ---
 

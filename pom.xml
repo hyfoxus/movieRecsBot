@@ -13,7 +13,7 @@
 
     <groupId>com.gnemirko</groupId>
     <artifactId>movie-recs-monorepo</artifactId>
-    <version>1.7.0</version>
+    <version>1.7.2</version>
     <packaging>pom</packaging>
 
     <name>movieRecs Monorepo</name>
@@ -23,6 +23,7 @@
         <module>apps/movieRecBot</module>
         <module>apps/imdb-vec</module>
         <module>apps/normalizer</module>
+        <module>apps/movie-mcp-server</module>
     </modules>
 
     <properties>

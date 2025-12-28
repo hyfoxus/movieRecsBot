@@ -9,7 +9,6 @@ Convenience wrapper that runs both setup_data.sh and setup_bot.sh so the full
 stack (IMDb data + Telegram bot) is configured in one go.
 
 Options forwarded to setup_data.sh:
-  --use-defaults
   --skip-bootstrap
   --no-rebuild-index
 
@@ -30,7 +29,7 @@ BOT_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --use-defaults|--skip-bootstrap|--no-rebuild-index)
+    --skip-bootstrap|--no-rebuild-index)
       DATA_ARGS+=("$1")
       shift
       ;;

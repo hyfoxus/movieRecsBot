@@ -1,172 +1,222 @@
-  name: Auto Bump Version
+name: Auto Bump Version
 
-  on:
-    push:
-      branches:
-        - main
-        - chore/monorepo-conversion
+'on':
+  push:
+    branches:
+      - main
+      - chore/monorepo-conversion
 
-  jobs:
-    bump-and-build:
-      runs-on: ubuntu-latest
+jobs:
+  bump-and-build:
+    runs-on: ubuntu-latest
 
-      permissions:
-        contents: write
+    # Prevent infinite loop on bot push
+    if: github.actor != 'github-actions[bot]'
 
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
-            token: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
 
-        - name: Set up Java 24
-          uses: actions/setup-java@v4
-          with:
-            java-version: '24'
-            distribution: 'temurin'
-            cache: 'maven'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Gather version metadata
-          id: gather
-          run: |
-            set -euo pipefail
+      - name: Set up Java 24
+        uses: actions/setup-java@v4
+        with:
+          java-version: '24'
+          distribution: 'temurin'
+          cache: 'maven'
 
-            increment_version() {
-              local version="$1"
-              local mode="$2"
-              IFS='.' read -r major minor patch <<< "$version"
-              case "$mode" in
-                patch)
-                  patch=$((patch + 1))
-                  ;;
-                *)
-                  minor=$((minor + 1))
-                  patch=0
-                  ;;
-              esac
-              echo "${major}.${minor}.${patch}"
-            }
+      - name: Ensure jq is installed
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
 
-            BRANCH_NAME="${GITHUB_REF_NAME}"
-            if [[ "$BRANCH_NAME" == "chore/monorepo-conversion" ]]; then
-              BUMP_KIND="patch"
+      - name: Gather version metadata
+        id: gather
+        run: |
+          set -euo pipefail
+
+          increment_version() {
+            local version="$1"
+            local mode="$2"
+
+            local base="${version%%-*}"
+            local suffix=""
+            if [[ "$version" == *"-"* ]]; then
+              suffix="-${version#*-}"
+            fi
+
+            IFS='.' read -r major minor patch <<< "$base"
+            major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
+
+            case "$mode" in
+              patch) patch=$((patch + 1)) ;;
+              *)     minor=$((minor + 1)); patch=0 ;;
+            esac
+
+            echo "${major}.${minor}.${patch}${suffix}"
+          }
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH_NAME" == "chore/monorepo-conversion" ]]; then
+            BUMP_KIND="patch"
+          else
+            BUMP_KIND="minor"
+          fi
+          echo "BUMP_KIND=$BUMP_KIND" >> "$GITHUB_ENV"
+
+          ROOT_CURRENT=$(mvn -q -f pom.xml -N help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
+          ROOT_NEXT=$(increment_version "$ROOT_CURRENT" "$BUMP_KIND")
+          echo "ROOT_NEXT_VERSION=$ROOT_NEXT" >> "$GITHUB_ENV"
+
+          BASE_SHA_INPUT="${{ github.event.before }}"
+          if [[ -z "$BASE_SHA_INPUT" || "$BASE_SHA_INPUT" == "0000000000000000000000000000000000000000" ]]; then
+            BASE_SHA=$(git rev-parse HEAD^ 2>/dev/null || { git rev-list --max-parents=0 HEAD | tail -n1; })
+          else
+            if git cat-file -e "${BASE_SHA_INPUT}^{commit}" >/dev/null 2>&1; then
+              BASE_SHA="$BASE_SHA_INPUT"
             else
-              BUMP_KIND="minor"
+              echo "Base commit ${BASE_SHA_INPUT} missing locally. Falling back to previous commit." >&2
+              BASE_SHA=$(git rev-parse HEAD^ 2>/dev/null || { git rev-list --max-parents=0 HEAD | tail -n1; })
             fi
-            echo "BUMP_KIND=$BUMP_KIND" >> "$GITHUB_ENV"
+          fi
+          echo "BASE_SHA=$BASE_SHA"
 
-            ROOT_CURRENT=$(mvn -q -N help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
-            ROOT_NEXT=$(increment_version "$ROOT_CURRENT" "$BUMP_KIND")
-            echo "ROOT_NEXT_VERSION=$ROOT_NEXT" >> "$GITHUB_ENV"
+          META_FILE="${RUNNER_TEMP}/version-meta.json"
+          {
+            echo '{'
+            echo "  \"bump\":\"$BUMP_KIND\","
+            echo "  \"root\":{\"current\":\"$ROOT_CURRENT\",\"next\":\"$ROOT_NEXT\"},"
+            echo '  "modules":{'
+          } > "$META_FILE"
 
-            BASE_SHA_INPUT="${{ github.event.before }}"
-            if [[ -z "$BASE_SHA_INPUT" || "$BASE_SHA_INPUT" == "0000000000000000000000000000000000000000" ]]; then
-              BASE_SHA_FALLBACK=$(git rev-parse HEAD^ 2>/dev/null || { git rev-list --max-parents=0 HEAD | tail -n1; })
-              BASE_SHA="$BASE_SHA_FALLBACK"
+          module_names=(movieRecBot imdbvec normalizer movie-mcp-server)
+          module_dirs=(apps/movieRecBot apps/imdb-vec apps/normalizer apps/movie-mcp-server)
+          last=$(( ${#module_names[@]} - 1 ))
+
+          for idx in "${!module_names[@]}"; do
+            name="${module_names[$idx]}"
+            dir="${module_dirs[$idx]}"
+
+            current=$(mvn -q -f "$dir/pom.xml" help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
+
+            if diff_output=$(git diff --name-only "$BASE_SHA" HEAD -- "$dir" 2>&1); then
+              [[ -n "$diff_output" ]] && changed=true || changed=false
             else
-              if git cat-file -e "${BASE_SHA_INPUT}^{commit}" >/dev/null 2>&1; then
-                BASE_SHA="$BASE_SHA_INPUT"
-              else
-                echo "Base commit ${BASE_SHA_INPUT} missing locally. Falling back to previous commit." >&2
-                BASE_SHA=$(git rev-parse HEAD^ 2>/dev/null || { git rev-list --max-parents=0 HEAD | tail -n1; })
-              fi
-            fi
-            echo "BASE_SHA=$BASE_SHA"
-
-            TMP_FILE=$(mktemp)
-            {
-              echo '{'
-              echo "  \"bump\":\"$BUMP_KIND\","
-              echo "  \"root\":{\"current\":\"$ROOT_CURRENT\",\"next\":\"$ROOT_NEXT\"},"
-              echo '  "modules":{'
-            } > "$TMP_FILE"
-
-            module_names=(movieRecBot imdbvec normalizer movie-mcp-server)
-            module_dirs=(apps/movieRecBot apps/imdb-vec apps/normalizer apps/movie-mcp-server)
-            last=$(( ${#module_names[@]} - 1 ))
-            for idx in "${!module_names[@]}"; do
-              name="${module_names[$idx]}"
-              dir="${module_dirs[$idx]}"
-              current=$(mvn -q -pl "$dir" help:evaluate -Dexpression=project.version -DforceStdout | tr -d '\r' | tail -n1)
-              if diff_output=$(git diff --name-only "$BASE_SHA" HEAD -- "$dir" 2>&1); then
-                if [[ -n "$diff_output" ]]; then
-                  changed=true
-                else
-                  changed=false
-                fi
-              else
-                echo "git diff failed for $dir (treating as changed): $diff_output" >&2
-                changed=true
-              fi
-              if [[ "$idx" -lt "$last" ]]; then
-                comma=","
-              else
-                comma=""
-              fi
-              printf '    "%s":{"path":"%s","current":"%s","changed":%s}%s\n' \
-                "$name" "$dir" "$current" "$changed" "$comma" >> "$TMP_FILE"
-            done
-
-            {
-              echo '  }'
-              echo '}'
-            } >> "$TMP_FILE"
-
-            echo "VERSION_META_FILE=$TMP_FILE" >> "$GITHUB_ENV"
-            echo "::group::Version metadata"
-            cat "$TMP_FILE"
-            echo "::endgroup::"
-
-        - name: Update root version
-          run: |
-            set -euo pipefail
-            mvn -B versions:set -DnewVersion="$ROOT_NEXT_VERSION" -DgenerateBackupPoms=false
-
-        - name: Update module versions
-          run: |
-            set -euo pipefail
-
-            increment_version() {
-              local version="$1"
-              local mode="$2"
-              IFS='.' read -r major minor patch <<< "$version"
-              if [[ "$mode" == "patch" ]]; then
-                patch=$((patch + 1))
-              else
-                minor=$((minor + 1))
-                patch=0
-              fi
-              echo "${major}.${minor}.${patch}"
-            }
-
-            META_FILE="$VERSION_META_FILE"
-            if [[ ! -s "$META_FILE" ]]; then
-              echo "Version metadata file missing" >&2
-              exit 1
+              echo "git diff failed for $dir (treating as changed): $diff_output" >&2
+              changed=true
             fi
 
-            mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
-            for name in "${modules[@]}"; do
-              path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
-              current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
-              changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
-              if [[ "$changed" == "true" ]]; then
-                next=$(increment_version "$current" "$BUMP_KIND")
-              else
-                next="$current"
-              fi
-              echo "Setting $name ($path) version -> $next (changed=$changed)"
-              mvn -B -pl "$path" versions:set -DnewVersion="$next" -DprocessAllModules=false -DgenerateBackupPoms=false
-            done
+            [[ "$idx" -lt "$last" ]] && comma="," || comma=""
+            printf '    "%s":{"path":"%s","current":"%s","changed":%s}%s\n' \
+              "$name" "$dir" "$current" "$changed" "$comma" >> "$META_FILE"
+          done
 
-        - name: Commit and push bump
-          run: |
-            if git diff --quiet --exit-code; then
-              echo "No files changed after version bump. Skipping commit."
-              exit 0
+          {
+            echo '  }'
+            echo '}'
+          } >> "$META_FILE"
+
+          echo "VERSION_META_FILE=$META_FILE" >> "$GITHUB_ENV"
+
+          echo "::group::Version metadata"
+          cat "$META_FILE"
+          echo "::endgroup::"
+
+      - name: Update root version
+        run: |
+          set -euo pipefail
+          mvn -B -f pom.xml -N versions:set \
+            -DnewVersion="$ROOT_NEXT_VERSION" \
+            -DgenerateBackupPoms=false
+
+      - name: Update module versions (only if module declares its own <project><version>)
+        run: |
+          set -euo pipefail
+
+          increment_version() {
+            local version="$1"
+            local mode="$2"
+            local base="${version%%-*}"
+            local suffix=""
+            [[ "$version" == *"-"* ]] && suffix="-${version#*-}"
+            IFS='.' read -r major minor patch <<< "$base"
+            major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
+            if [[ "$mode" == "patch" ]]; then
+              patch=$((patch + 1))
+            else
+              minor=$((minor + 1)); patch=0
             fi
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -am "chore: bump versions (${GITHUB_REF_NAME}) to $ROOT_NEXT_VERSION"
-            git push origin HEAD
+            echo "${major}.${minor}.${patch}${suffix}"
+          }
+
+          # prints "true"/"false" – checks ONLY <project><version> (direct child), namespace-safe
+          has_direct_project_version() {
+            python3 -c 'import sys, xml.etree.ElementTree as ET
+          pom=sys.argv[1]
+          root=ET.parse(pom).getroot()
+
+          def lname(t): return t.split("}",1)[1] if "}" in t else t
+          print("true" if any(lname(c.tag)=="version" for c in list(root)) else "false")' "$1"
+          }
+
+          META_FILE="$VERSION_META_FILE"
+          mapfile -t modules < <(jq -r '.modules | keys[]' "$META_FILE")
+
+          for name in "${modules[@]}"; do
+            path=$(jq -r ".modules[\"$name\"].path" "$META_FILE")
+            current=$(jq -r ".modules[\"$name\"].current" "$META_FILE")
+            changed=$(jq -r ".modules[\"$name\"].changed" "$META_FILE")
+            pom="$path/pom.xml"
+
+            if [[ "$(has_direct_project_version "$pom")" != "true" ]]; then
+              echo "Skipping $name ($path): version is inherited from parent."
+              continue
+            fi
+
+            if [[ "$changed" == "true" ]]; then
+              next=$(increment_version "$current" "$BUMP_KIND")
+            else
+              next="$current"
+            fi
+
+            echo "Setting $name ($path) version -> $next (changed=$changed)"
+
+            # Try to set; if Maven still says "inherited from parent", skip without failing the job.
+            set +e
+            out=$(mvn -B -f "$pom" versions:set -DnewVersion="$next" -DgenerateBackupPoms=false 2>&1)
+            code=$?
+            set -e
+
+            if [[ $code -ne 0 ]]; then
+              if echo "$out" | grep -q "Project version is inherited from parent"; then
+                echo "Skipping $name ($path): Maven reports version is inherited from parent."
+                continue
+              fi
+              echo "$out"
+              exit $code
+            fi
+          done
+
+      - name: Commit and push bump
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet --exit-code; then
+            echo "No files changed after version bump. Skipping commit."
+            exit 0
+          fi
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "chore: bump versions (${GITHUB_REF_NAME}) to $ROOT_NEXT_VERSION"
+          git push origin HEAD

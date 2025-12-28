@@ -1,0 +1,31 @@
+server:
+  port: ${SERVER_PORT:8082}
+  shutdown: graceful
+
+spring:
+  application:
+    name: movie-mcp-server
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:25432/imdb}
+    username: ${SPRING_DATASOURCE_USERNAME:imdb}
+    password: ${SPRING_DATASOURCE_PASSWORD:changeme}
+    driver-class-name: org.postgresql.Driver
+  ai:
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        options:
+          model: ${SPRING_AI_OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+  main:
+    banner-mode: console
+
+logging:
+  level:
+    com.gnemirko.mcpmovie: INFO
+
+app:
+  mcp:
+    name: ${APP_MCP_NAME:Movie Recommendations MCP}
+    version: ${APP_MCP_VERSION:1.0.0}
+    description: ${APP_MCP_DESCRIPTION:Provides pgvector-backed movie search and metadata.}
+    max-results: ${APP_MCP_MAX_RESULTS:15}

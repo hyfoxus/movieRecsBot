@@ -16,10 +16,18 @@ public class ReportButtonDecorator {
 
     public static final String REPORT_CALLBACK_DATA = "report:start";
     private static final String REPORT_BUTTON_TEXT = "⚠️ Сообщить о проблеме";
+    private final boolean enabled;
+
+    public ReportButtonDecorator(@org.springframework.beans.factory.annotation.Value("${app.report-button.enabled:false}") boolean enabled) {
+        this.enabled = enabled;
+    }
 
     public SendMessage decorate(SendMessage message) {
         if (message == null) {
             return null;
+        }
+        if (!enabled) {
+            return message;
         }
 
         if (message.getReplyMarkup() instanceof InlineKeyboardMarkup inlineKeyboardMarkup) {

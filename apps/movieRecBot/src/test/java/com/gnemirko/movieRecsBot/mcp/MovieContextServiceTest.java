@@ -1,56 +1,77 @@
 package com.gnemirko.movieRecsBot.mcp;
 
+import com.gnemirko.movieRecsBot.entity.UserProfile;
+import com.gnemirko.movieRecsBot.service.UserLanguage;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class MovieContextServiceTest {
 
-    @Test
-    void formatCatalogEntry_includesCanonicalFields() {
-        MovieContextItem item = new MovieContextItem(
-                "tt0457430",
-                "Лабиринт Фавна",
-                2006,
-                8.2,
-                1800,
-                0.97d,
-                List.of("Fantasy", "Drama"),
-                List.of(new MovieContextItem.Person("nm0000", "Иван Иванов")),
-                Map.of("plot", "Темная сказка о мире Испании 1944 года.")
-        );
+    @Mock
+    private McpClient mcpClient;
 
-        String entry = MovieContextService.formatCatalogEntry(1, item);
+    private MovieContextService service;
 
-        assertThat(entry).contains("1) Title: Лабиринт Фавна");
-        assertThat(entry).contains("Year: 2006");
-        assertThat(entry).contains("Genres: Fantasy, Drama");
-        assertThat(entry).contains("Plot: Темная сказка");
-        assertThat(entry).contains("Similarity: 0.97");
-        assertThat(entry).contains("IMDb ID: tt0457430");
-        assertThat(entry).contains("Actors: Иван Иванов");
+    @BeforeEach
+    void setUp() {
+        service = new MovieContextService(mcpClient);
     }
 
     @Test
-    void formatCatalogEntry_handlesMissingYear() {
+    void buildContextBlockMergesProfileAndUserQuery() {
+        UserProfile profile = new UserProfile();
+        profile.getLikedGenres().add("Drama");
+        profile.getBlocked().add("genre:horror");
+
         MovieContextItem item = new MovieContextItem(
-                "tt9999999",
-                "Сказка на ночь",
-                null,
-                null,
-                null,
-                0.50d,
-                List.of(),
-                List.of(),
-                Map.of()
+                "tt123",
+                "Evening Story",
+                2021,
+                8.1,
+                15000,
+                0.92,
+                List.of("Drama"),
+                List.of(new MovieContextItem.Person("nm1", "Actor One")),
+                Map.of("plot", "A calm evening tale")
+        );
+        when(mcpClient.search(eq("Фильм на вечер | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(5)))
+                .thenReturn(List.of(item));
+
+        MovieContextService.ContextBlock block = service.buildContextBlock(
+                "Фильм на вечер",
+                "Prefers drama",
+                profile,
+                UserLanguage.fromIsoCode("ru"),
+                List.of("Keanu Reeves")
         );
 
-        String entry = MovieContextService.formatCatalogEntry(2, item);
+        assertThat(block.block()).contains("CATALOG FACTS").contains("Evening Story");
+        assertThat(block.items()).hasSize(1);
+    }
 
-        assertThat(entry).contains("2) Title: Сказка на ночь");
-        assertThat(entry).contains("Year: unknown");
+    @Test
+    void buildContextBlockReturnsEmptyWhenNoProfile() {
+        MovieContextService.ContextBlock block = service.buildContextBlock(
+                "request",
+                "",
+                null,
+                UserLanguage.fromIsoCode("en"),
+                List.of()
+        );
+
+        assertThat(block.block()).isEmpty();
+        assertThat(block.items()).isEmpty();
     }
 }

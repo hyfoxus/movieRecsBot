@@ -55,8 +55,39 @@ class NormalizationServiceTest {
         assertThat(response.normalizedText()).isEqualTo("hello there");
     }
 
+    @Test
+    void translatesColloquialEveningPrompt() {
+        client.enqueue("{\"language\":\"ru\",\"confidence\":0.73}");
+        client.enqueue("A movie for the evening");
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("Фильм на вечер");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.translationApplied()).isTrue();
+        assertThat(response.normalizedText()).isEqualTo("A movie for the evening");
+        assertThat(client.callCount()).isEqualTo(2);
+        assertThat(client.lastCall().prompt()).contains("Фильм на вечер");
+    }
+
+    @Test
+    void keepsMixedLanguageRequestWhenDetectedEnglish() {
+        client.enqueue("{\"language\":\"en\",\"confidence\":0.91}");
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("Need фильм for evening");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.translationApplied()).isFalse();
+        assertThat(response.normalizedText()).isEqualTo("Need фильм for evening");
+        assertThat(client.callCount()).isEqualTo(1);
+    }
+
     private static final class DummyCompletionClient implements CompletionClient {
         private final Deque<String> responses = new ArrayDeque<>();
+        private final Deque<Call> calls = new ArrayDeque<>();
 
         void enqueue(String response) {
             responses.addLast(response);
@@ -64,7 +95,19 @@ class NormalizationServiceTest {
 
         @Override
         public String complete(String model, String prompt) {
+            calls.addLast(new Call(model, prompt));
             return responses.pollFirst();
+        }
+
+        int callCount() {
+            return calls.size();
+        }
+
+        Call lastCall() {
+            return calls.peekLast();
+        }
+
+        private record Call(String model, String prompt) {
         }
     }
 }

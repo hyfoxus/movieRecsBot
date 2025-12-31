@@ -9,6 +9,8 @@ COPY apps/movieRecBot/pom.xml apps/movieRecBot/pom.xml
 COPY apps/movieRecBot/src apps/movieRecBot/src
 COPY apps/normalizer/pom.xml apps/normalizer/pom.xml
 COPY apps/normalizer/src apps/normalizer/src
+COPY apps/movie-mcp-server/pom.xml apps/movie-mcp-server/pom.xml
+COPY apps/movie-mcp-server/src apps/movie-mcp-server/src
 COPY .git .git
 
 RUN --mount=type=cache,target=/root/.m2 \

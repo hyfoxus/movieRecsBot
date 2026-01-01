@@ -118,8 +118,8 @@ services:
   imdb-mcp:
     container_name: imdb-mcp
     build:
-      context: ./apps/mcp-fastmcp
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/movie-mcp-server/Dockerfile
     depends_on:
       imdb-postgres:
         condition: service_healthy

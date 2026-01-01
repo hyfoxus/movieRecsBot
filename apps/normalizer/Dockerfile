@@ -8,6 +8,8 @@ COPY apps/imdb-vec/pom.xml apps/imdb-vec/pom.xml
 COPY apps/imdb-vec/src apps/imdb-vec/src
 COPY apps/normalizer/pom.xml apps/normalizer/pom.xml
 COPY apps/normalizer/src apps/normalizer/src
+COPY apps/movie-mcp-server/pom.xml apps/movie-mcp-server/pom.xml
+COPY apps/movie-mcp-server/src apps/movie-mcp-server/src
 
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q -pl apps/normalizer -am -DskipTests package spring-boot:repackage

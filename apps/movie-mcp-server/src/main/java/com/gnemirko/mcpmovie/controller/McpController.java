@@ -24,6 +24,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,6 +45,7 @@ public class McpController {
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final MovieMcpProperties properties;
+    private final Scheduler blockingScheduler = Schedulers.boundedElastic();
 
     public McpController(MovieSearchService movieService,
                          ObjectMapper objectMapper,
@@ -73,61 +77,67 @@ public class McpController {
     }
 
     @PostMapping("/mcp/v1/tools")
-    public McpToolResponse invokeTool(@Valid @RequestBody ToolInvocation invocation) {
+    public Mono<McpToolResponse> invokeTool(@Valid @RequestBody ToolInvocation invocation) {
         if (!TOOL_NAME.equals(invocation.name())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Tool not found");
+            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Tool not found"));
         }
-        MovieSearchRequest request = convertArguments(invocation.arguments());
-        List<MovieContext> results = movieService.search(request);
-        List<ContentBlock> content = List.of(
-                ContentBlock.text(String.format(
-                        Locale.ROOT,
-                        "Top %d matches for query '%s'.",
-                        results.size(),
-                        request.query()
-                )),
-                ContentBlock.json(results)
-        );
-        return new McpToolResponse(content);
+        return Mono.fromCallable(() -> {
+                    MovieSearchRequest request = convertArguments(invocation.arguments());
+                    List<MovieContext> results = movieService.search(request);
+                    List<ContentBlock> content = List.of(
+                            ContentBlock.text(String.format(
+                                    Locale.ROOT,
+                                    "Top %d matches for query '%s'.",
+                                    results.size(),
+                                    request.query()
+                            )),
+                            ContentBlock.json(results)
+                    );
+                    return new McpToolResponse(content);
+                })
+                .subscribeOn(blockingScheduler);
     }
 
     @PostMapping("/mcp/v1/resources/query")
-    public ResourceQueryResponse queryResources(@Valid @RequestBody ResourceQuery query) {
-        List<ResourceResult> results = new ArrayList<>();
-        for (ResourcePointer pointer : query.resources()) {
-            String uri = pointer.uri();
-            if (!uri.startsWith(MOVIE_URI_PREFIX)) {
-                results.add(new ResourceResult(
-                        uri,
-                        List.of(ContentBlock.text("Unsupported resource"))
-                ));
-                continue;
-            }
-            String tconst = uri.substring(MOVIE_URI_PREFIX.length());
-            if (tconst.isBlank()) {
-                results.add(new ResourceResult(
-                        uri,
-                        List.of(ContentBlock.text("Missing IMDb identifier"))
-                ));
-                continue;
-            }
-            MovieContext movie = movieService.fetchByTconst(tconst).orElse(null);
-            if (movie == null) {
-                results.add(new ResourceResult(
-                        uri,
-                        List.of(ContentBlock.text("Movie " + tconst + " not found."))
-                ));
-                continue;
-            }
-            results.add(new ResourceResult(
-                    uri,
-                    List.of(
-                            ContentBlock.text("Metadata for " + movie.title()),
-                            ContentBlock.json(movie)
-                    )
-            ));
-        }
-        return new ResourceQueryResponse(results);
+    public Mono<ResourceQueryResponse> queryResources(@Valid @RequestBody ResourceQuery query) {
+        return Mono.fromCallable(() -> {
+                    List<ResourceResult> results = new ArrayList<>();
+                    for (ResourcePointer pointer : query.resources()) {
+                        String uri = pointer.uri();
+                        if (!uri.startsWith(MOVIE_URI_PREFIX)) {
+                            results.add(new ResourceResult(
+                                    uri,
+                                    List.of(ContentBlock.text("Unsupported resource"))
+                            ));
+                            continue;
+                        }
+                        String tconst = uri.substring(MOVIE_URI_PREFIX.length());
+                        if (tconst.isBlank()) {
+                            results.add(new ResourceResult(
+                                    uri,
+                                    List.of(ContentBlock.text("Missing IMDb identifier"))
+                            ));
+                            continue;
+                        }
+                        MovieContext movie = movieService.fetchByTconst(tconst).orElse(null);
+                        if (movie == null) {
+                            results.add(new ResourceResult(
+                                    uri,
+                                    List.of(ContentBlock.text("Movie " + tconst + " not found."))
+                            ));
+                            continue;
+                        }
+                        results.add(new ResourceResult(
+                                uri,
+                                List.of(
+                                        ContentBlock.text("Metadata for " + movie.title()),
+                                        ContentBlock.json(movie)
+                                )
+                        ));
+                    }
+                    return new ResourceQueryResponse(results);
+                })
+                .subscribeOn(blockingScheduler);
     }
 
     private MovieSearchRequest convertArguments(Map<String, Object> arguments) {

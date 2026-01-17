@@ -223,6 +223,13 @@ Provide a TMDB v3 API key before bootstrapping so the backfill can call `/find/{
   - `TMDB_ENABLED=false` to skip the TMDB call entirely.
 - The IMDb bootstrap first ingests the TSVs, then fetches the TMDB overview for every movie lacking `plot`, and finally recomputes embeddings so the richer text is captured.
 - When the API key is missing, the service logs that the TMDB step is disabled and keeps the previous zero-plot behavior.
+- To run the TMDB plot job without re-importing IMDb data, call `POST /api/admin/tmdb-overviews` with the same `X-Bootstrap-Token`. Optional query params: `maxUpdates` (caps rows for this run) and `batchSize` (overrides the default chunk size). Example:
+  ```bash
+  curl -X POST \
+    -H "X-Bootstrap-Token: ${IMDB_BOOTSTRAP_TOKEN:-bootstrap-token}" \
+    "http://localhost:${IMDB_HTTP_PORT:-8088}/api/admin/tmdb-overviews?maxUpdates=100000&batchSize=200"
+  ```
+  The request returns immediately (202 Accepted) while the job streams progress to the `imdb-vec` logs.
 
 ## IMDb Data Enrichment
 

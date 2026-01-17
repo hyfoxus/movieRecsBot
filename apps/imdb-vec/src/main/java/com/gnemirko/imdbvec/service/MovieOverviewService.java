@@ -35,17 +35,21 @@ public class MovieOverviewService {
     }
 
     public void backfillOverviews() {
+        backfillOverviews(null, null);
+    }
+
+    public void backfillOverviews(Long maxUpdatesOverride, Integer batchSizeOverride) {
         if (!tmdbClient.isEnabled()) {
             log.info("TMDB overview import disabled or API key missing; skipping plot backfill.");
             return;
         }
-        log.info("Starting TMDB overview backfill...");
+        long appliedMaxUpdates = maxUpdatesOverride != null && maxUpdatesOverride > 0 ? maxUpdatesOverride : Math.max(0, properties.getMaxUpdates());
+        int appliedBatchSize = batchSizeOverride != null && batchSizeOverride > 0 ? batchSizeOverride : Math.max(1, properties.getBatchSize());
+        log.info("Starting TMDB overview backfill... (batchSize={}, maxUpdates={})", appliedBatchSize, appliedMaxUpdates == 0 ? "unlimited" : appliedMaxUpdates);
         long totalUpdated = 0;
-        int batchSize = Math.max(1, properties.getBatchSize());
-        long updateCap = Math.max(0, properties.getMaxUpdates());
         long cursor = 0L;
         while (true) {
-            List<Movie> batch = movieRepository.findBatchMissingPlot(cursor, batchSize);
+            List<Movie> batch = movieRepository.findBatchMissingPlot(cursor, appliedBatchSize);
             if (batch.isEmpty()) {
                 break;
             }
@@ -66,23 +70,25 @@ public class MovieOverviewService {
             if (toUpdate.isEmpty()) {
                 continue;
             }
-            if (updateCap > 0) {
-                long remaining = updateCap - totalUpdated;
+            List<Movie> cappedUpdates = toUpdate;
+            List<Movie> cappedUpdates = toUpdate;
+            if (appliedMaxUpdates > 0) {
+                long remaining = appliedMaxUpdates - totalUpdated;
                 if (remaining <= 0) {
                     break;
                 }
-                if (toUpdate.size() > remaining) {
-                    toUpdate = new ArrayList<>(toUpdate.subList(0, (int) remaining));
+                if (cappedUpdates.size() > remaining) {
+                    cappedUpdates = new ArrayList<>(cappedUpdates.subList(0, (int) remaining));
                 }
             }
-            if (toUpdate.isEmpty()) {
+            if (cappedUpdates.isEmpty()) {
                 continue;
             }
-            persistPlots(toUpdate);
-            totalUpdated += toUpdate.size();
-            log.info("Updated {} movie plots from TMDB (running total {}).", toUpdate.size(), totalUpdated);
-            if (updateCap > 0 && totalUpdated >= updateCap) {
-                log.info("Reached TMDB overview update cap of {}; stopping early.", updateCap);
+            persistPlots(cappedUpdates);
+            totalUpdated += cappedUpdates.size();
+            log.info("Updated {} movie plots from TMDB (running total {}).", cappedUpdates.size(), totalUpdated);
+            if (appliedMaxUpdates > 0 && totalUpdated >= appliedMaxUpdates) {
+                log.info("Reached TMDB overview update cap of {}; stopping early.", appliedMaxUpdates);
                 break;
             }
         }

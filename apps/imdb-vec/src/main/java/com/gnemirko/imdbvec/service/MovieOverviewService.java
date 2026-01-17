@@ -71,7 +71,6 @@ public class MovieOverviewService {
                 continue;
             }
             List<Movie> cappedUpdates = toUpdate;
-            List<Movie> cappedUpdates = toUpdate;
             if (appliedMaxUpdates > 0) {
                 long remaining = appliedMaxUpdates - totalUpdated;
                 if (remaining <= 0) {

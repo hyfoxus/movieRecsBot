@@ -129,6 +129,12 @@ detect_compose
 require_file "$BOT_ENV" "bot .env file"
 require_file "$MCP_ENV" "MCP .env file"
 
+if [[ -z "${TMDB_API_KEY:-}" ]]; then
+  info "TMDB_API_KEY is not set; imdb-vec will skip TMDB overview backfill."
+else
+  info "TMDB API key detected; TMDB overview backfill enabled."
+fi
+
 mkdir -p "$(dirname "$TELEGRAM_SECRET_PATH")"
 if [[ -f "$TELEGRAM_SECRET_PATH" ]]; then
   info "Telegram token secret already exists at secrets/TELEGRAM_BOT_TOKEN."

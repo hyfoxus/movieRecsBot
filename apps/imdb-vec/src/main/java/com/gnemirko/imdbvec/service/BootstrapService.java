@@ -17,13 +17,16 @@ public class BootstrapService {
     private final ImportService importer;
     private final EmbeddingService embeddings;
     private final VectorIndexService indexer;
+    private final MovieOverviewService overviewService;
     private final boolean skipEmbeddingsOnError;
 
     public BootstrapService(ImportService importer,
+                            MovieOverviewService overviewService,
                             EmbeddingService embeddings,
                             VectorIndexService indexer,
                             @Value("${app.bootstrap.skipEmbeddingsOnError:true}") boolean skipEmbeddingsOnError) {
         this.importer = importer;
+        this.overviewService = overviewService;
         this.embeddings = embeddings;
         this.indexer = indexer;
         this.skipEmbeddingsOnError = skipEmbeddingsOnError;
@@ -36,6 +39,11 @@ public class BootstrapService {
         try {
             log.info("Bootstrap job started (rebuildIndex={})", rebuildIndex);
             importer.runFullImport();
+            try {
+                overviewService.backfillOverviews();
+            } catch (Exception ex) {
+                log.warn("TMDB overview backfill failed: {}", ex.getMessage());
+            }
             try {
                 embeddings.backfillEmbeddings();
             } catch (Exception ex) {

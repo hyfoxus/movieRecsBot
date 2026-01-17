@@ -64,4 +64,19 @@ public class BootstrapService {
         }
         return future;
     }
+
+    @Async
+    public CompletableFuture<Void> runTmdbOverviewBackfill(Long maxUpdates, Integer batchSize) {
+        var future = new CompletableFuture<Void>();
+        try {
+            log.info("TMDB overview backfill job started (maxUpdates={}, batchSize={})", maxUpdates, batchSize);
+            overviewService.backfillOverviews(maxUpdates, batchSize);
+            log.info("TMDB overview backfill job finished successfully.");
+            future.complete(null);
+        } catch (Exception ex) {
+            log.error("TMDB overview backfill job failed", ex);
+            future.completeExceptionally(ex);
+        }
+        return future;
+    }
 }

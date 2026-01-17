@@ -37,6 +37,16 @@ app:
       readMillis: 60000
     embeddingMaxRetries: 3
     embeddingRetryDelay: PT5S
+  tmdb:
+    enabled: ${APP_TMDB_ENABLED:true}
+    baseUrl: ${APP_TMDB_BASE_URL:https://api.themoviedb.org/3}
+    apiKey: ${APP_TMDB_API_KEY:}
+    language: ${APP_TMDB_LANGUAGE:en-US}
+    connectTimeout: PT5S
+    readTimeout: PT10S
+    maxRetries: ${APP_TMDB_MAX_RETRIES:3}
+    retryDelay: ${APP_TMDB_RETRY_DELAY:PT2S}
+    batchSize: ${APP_TMDB_BATCH_SIZE:100}
   admin:
     bootstrap-token: change-me
   recommend:

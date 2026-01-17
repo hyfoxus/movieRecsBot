@@ -176,6 +176,10 @@ public class EmbeddingService {
         if (!actors.isEmpty()) {
             sb.append("\nActors: ").append(String.join(", ", actors));
         }
+        String plot = normalizePlot(movie.getPlot());
+        if (!plot.isBlank()) {
+            sb.append("\n\nOverview: ").append(plot);
+        }
         return sb.toString();
     }
 
@@ -260,5 +264,16 @@ public class EmbeddingService {
                 (rs, rowNum) -> rs.getString(1),
                 movieId
         );
+    }
+
+    private String normalizePlot(String plot) {
+        if (plot == null) {
+            return "";
+        }
+        String trimmed = plot.trim();
+        if (trimmed.length() <= 800) {
+            return trimmed;
+        }
+        return trimmed.substring(0, 797) + "...";
     }
 }

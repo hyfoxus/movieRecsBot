@@ -219,6 +219,7 @@ Provide a TMDB v3 API key before bootstrapping so the backfill can call `/find/{
 
 - Set `TMDB_API_KEY` in your shell (or a root-level `.env` consumed by Docker Compose). Optional overrides:
   - `TMDB_LANGUAGE` (default `en-US`) to request localized overviews.
+  - `TMDB_MAX_UPDATES` to cap how many missing plots each bootstrap should fill (default unlimited; set to `100000` to stop after the first 100k updates).
   - `TMDB_ENABLED=false` to skip the TMDB call entirely.
 - The IMDb bootstrap first ingests the TSVs, then fetches the TMDB overview for every movie lacking `plot`, and finally recomputes embeddings so the richer text is captured.
 - When the API key is missing, the service logs that the TMDB step is disabled and keeps the previous zero-plot behavior.

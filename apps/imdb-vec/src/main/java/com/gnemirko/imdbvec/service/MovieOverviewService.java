@@ -40,8 +40,9 @@ public class MovieOverviewService {
             return;
         }
         log.info("Starting TMDB overview backfill...");
-        int totalUpdated = 0;
+        long totalUpdated = 0;
         int batchSize = Math.max(1, properties.getBatchSize());
+        long updateCap = Math.max(0, properties.getMaxUpdates());
         long cursor = 0L;
         while (true) {
             List<Movie> batch = movieRepository.findBatchMissingPlot(cursor, batchSize);
@@ -65,9 +66,25 @@ public class MovieOverviewService {
             if (toUpdate.isEmpty()) {
                 continue;
             }
+            if (updateCap > 0) {
+                long remaining = updateCap - totalUpdated;
+                if (remaining <= 0) {
+                    break;
+                }
+                if (toUpdate.size() > remaining) {
+                    toUpdate = new ArrayList<>(toUpdate.subList(0, (int) remaining));
+                }
+            }
+            if (toUpdate.isEmpty()) {
+                continue;
+            }
             persistPlots(toUpdate);
             totalUpdated += toUpdate.size();
             log.info("Updated {} movie plots from TMDB (running total {}).", toUpdate.size(), totalUpdated);
+            if (updateCap > 0 && totalUpdated >= updateCap) {
+                log.info("Reached TMDB overview update cap of {}; stopping early.", updateCap);
+                break;
+            }
         }
         log.info("TMDB overview backfill finished. Movies updated: {}", totalUpdated);
     }

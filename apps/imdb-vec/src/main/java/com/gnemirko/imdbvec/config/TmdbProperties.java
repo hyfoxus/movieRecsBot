@@ -16,6 +16,7 @@ public class TmdbProperties {
     private int maxRetries = 3;
     private Duration retryDelay = Duration.ofSeconds(2);
     private int batchSize = 100;
+    private long maxUpdates = 0;
 
     public boolean isEnabled() {
         return enabled;
@@ -87,5 +88,13 @@ public class TmdbProperties {
 
     public void setBatchSize(int batchSize) {
         this.batchSize = batchSize;
+    }
+
+    public long getMaxUpdates() {
+        return maxUpdates;
+    }
+
+    public void setMaxUpdates(long maxUpdates) {
+        this.maxUpdates = maxUpdates;
     }
 }

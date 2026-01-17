@@ -47,6 +47,7 @@ app:
     maxRetries: ${APP_TMDB_MAX_RETRIES:3}
     retryDelay: ${APP_TMDB_RETRY_DELAY:PT2S}
     batchSize: ${APP_TMDB_BATCH_SIZE:100}
+    maxUpdates: ${APP_TMDB_MAX_UPDATES:0}
   admin:
     bootstrap-token: change-me
   recommend:

@@ -32,4 +32,10 @@ class ActorMentionExtractorTest {
         Set<String> names = ActorMentionExtractor.extract("подскажи фильм свежий с бредом питтом");
         assertThat(names).containsExactly("Бредом Питтом");
     }
+
+    @Test
+    void extractsMixedCaseName() {
+        Set<String> names = ActorMentionExtractor.extract("Need a movie with leonardo dicaprio and al pacino");
+        assertThat(names).contains("Leonardo Dicaprio").contains("Al Pacino");
+}
 }

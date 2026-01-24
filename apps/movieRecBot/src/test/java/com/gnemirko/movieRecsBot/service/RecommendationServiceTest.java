@@ -11,6 +11,7 @@ import com.gnemirko.movieRecsBot.service.recommendation.RecommendationModelClien
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationPromptBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationRenderer;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationResponseParser;
+import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,7 +72,7 @@ class RecommendationServiceTest {
         NormalizedInput normalizedInput = new NormalizedInput("movie for the evening", language);
         when(textNormalizer.normalizeToEnglish("Фильм на вечер")).thenReturn(normalizedInput);
 
-        PromptContext context = new PromptContext(new UserProfile(), language, "summary", "history", "context", List.of());
+        PromptContext context = new PromptContext(new UserProfile(), language, "summary", "history", "context", List.of(), UserIntent.empty());
         when(promptContextBuilder.build(chatId, "movie for the evening", language)).thenReturn(context);
 
         when(promptBuilder.buildUserPrompt(context, "movie for the evening")).thenReturn("userPrompt");

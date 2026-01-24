@@ -2,6 +2,7 @@ package com.gnemirko.movieRecsBot.mcp;
 
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
+import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,24 +25,40 @@ public class MovieContextService {
                                           String profileSummary,
                                           UserProfile profile,
                                           UserLanguage language,
+                                          UserIntent intent,
                                           List<String> actorFilters) {
         if (profile == null) {
             return ContextBlock.empty();
         }
-        String query = userQuery == null ? "" : userQuery.trim();
+        String query = firstNonBlank(intent == null ? null : intent.rewrittenQuery(), userQuery);
+        if (intent != null && intent.descriptors() != null && !intent.descriptors().isEmpty()) {
+            query = query + " | Vibe: " + String.join(", ", intent.descriptors());
+        }
+        if (intent != null && intent.runtimeMinutes() != null) {
+            query = query + " | runtime <= " + intent.runtimeMinutes() + " minutes";
+        }
         if (profileSummary != null && !profileSummary.isBlank()) {
-            query = (query.isBlank() ? "" : query + " | ") + profileSummary;
+            query = query + " | " + profileSummary.trim();
         }
 
-        List<String> includeGenres = new ArrayList<>(profile.getLikedGenres());
-        List<String> excludeGenres = profile.getBlocked()
+        List<String> includeGenres = new ArrayList<>();
+        if (intent != null && intent.includeGenres() != null) {
+            includeGenres.addAll(intent.includeGenres());
+        }
+        includeGenres.addAll(profile.getLikedGenres());
+
+        List<String> excludeGenres = new ArrayList<>();
+        if (intent != null && intent.excludeGenres() != null) {
+            excludeGenres.addAll(intent.excludeGenres());
+        }
+        excludeGenres.addAll(profile.getBlocked()
                 .stream()
                 .map(tag -> tag.replace("genre:", ""))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
 
-        List<MovieContextItem> items = mcpClient.search(query, includeGenres, excludeGenres, actorFilters, 5);
+        List<MovieContextItem> items = mcpClient.search(query.trim(), includeGenres, excludeGenres, actorFilters, 5);
         if (items.isEmpty()) {
             return ContextBlock.empty();
         }
@@ -120,6 +137,13 @@ public class MovieContextService {
             return primary;
         }
         return fallback == null ? "" : fallback;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary.trim();
+        }
+        return fallback == null ? "" : fallback.trim();
     }
 
     public record ContextBlock(String block, List<MovieContextItem> items) {

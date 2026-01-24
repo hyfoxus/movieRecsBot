@@ -22,17 +22,20 @@ public class PromptContextBuilder {
     private final UserProfileService userProfileService;
     private final UserContextService userContextService;
     private final MovieContextService movieContextService;
+    private final UserIntentParser userIntentParser;
 
     public PromptContext build(long chatId, String normalizedUserText, UserLanguage language) {
         UserProfile profile = userProfileService.getOrCreate(chatId);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
-        List<String> actorFilters = resolveActorFilters(normalizedUserText, profile);
+        UserIntent intent = userIntentParser.parse(normalizedUserText, profileSummary, language);
+        List<String> actorFilters = resolveActorFilters(normalizedUserText, profile, intent);
         ContextBlock block = movieContextService.buildContextBlock(
                 normalizedUserText,
                 profileSummary,
                 profile,
                 language,
+                intent,
                 actorFilters);
         return new PromptContext(
                 profile,
@@ -40,12 +43,16 @@ public class PromptContextBuilder {
                 profileSummary,
                 history,
                 block.block(),
-                block.items()
+                block.items(),
+                intent
         );
     }
 
-    private List<String> resolveActorFilters(String userText, UserProfile profile) {
+    private List<String> resolveActorFilters(String userText, UserProfile profile, UserIntent intent) {
         LinkedHashSet<String> filters = new LinkedHashSet<>();
+        if (intent != null && intent.actorNames() != null) {
+            filters.addAll(intent.actorNames());
+        }
         filters.addAll(ActorMentionExtractor.extract(userText));
         if (profile != null && profile.getLikedActors() != null) {
             filters.addAll(profile.getLikedActors());

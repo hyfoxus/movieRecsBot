@@ -18,7 +18,7 @@ class MovieSearchRequestTest {
                 null,
                 null,
                 List.of(" Action ", "  "),
-                List.of("Drama", null),
+                java.util.Arrays.asList("Drama", null),
                 List.of("Tom Hanks", "  Meryl streep ")
         );
 

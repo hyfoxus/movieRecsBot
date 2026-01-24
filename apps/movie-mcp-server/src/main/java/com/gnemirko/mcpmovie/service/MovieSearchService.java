@@ -169,10 +169,15 @@ public class MovieSearchService {
                       JOIN person p ON p.id = mp.person_id
                       WHERE mp.movie_id = m.id
                         AND mp.category IN ('actor','actress')
-                        AND LOWER(p.primary_name) IN (:actorFilters)
+                        AND (%s)
                     )
-                    """);
-            params.addValue("actorFilters", request.actors());
+                    """.formatted(actorMatchClause(request.actors().size())));
+            for (int i = 0; i < request.actors().size(); i++) {
+                String normalized = request.actors().get(i) == null
+                        ? ""
+                        : request.actors().get(i).toLowerCase(Locale.ROOT).trim();
+                params.addValue("actorPattern" + i, "%" + normalized + "%");
+            }
         }
 
         String whereSql = String.join(" AND ", where);
@@ -280,5 +285,13 @@ public class MovieSearchService {
         }
         sb.append(']');
         return sb.toString();
+    }
+
+    private String actorMatchClause(int actorCount) {
+        List<String> clauses = new ArrayList<>();
+        for (int i = 0; i < actorCount; i++) {
+            clauses.add("LOWER(p.primary_name) LIKE LOWER(:actorPattern" + i + ")");
+        }
+        return String.join(" OR ", clauses);
     }
 }

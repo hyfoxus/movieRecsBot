@@ -94,6 +94,8 @@ services:
     build:
       context: ./apps/imdb-vec
       dockerfile: Dockerfile
+    env_file:
+      - ./apps/imdb-vec/.env
     depends_on:
       imdb-postgres:
         condition: service_healthy
@@ -108,10 +110,6 @@ services:
       APP_OLLAMA_HOST: ${IMDB_OLLAMA_HOST:-imdb-ollama}
       APP_OLLAMA_PORT: ${IMDB_OLLAMA_PORT:-11434}
       APP_ADMIN_BOOTSTRAP_TOKEN: ${IMDB_BOOTSTRAP_TOKEN:-bootstrap-token}
-      APP_TMDB_API_KEY: ${TMDB_API_KEY:-}
-      APP_TMDB_LANGUAGE: ${TMDB_LANGUAGE:-en-US}
-      APP_TMDB_ENABLED: ${TMDB_ENABLED:-true}
-      APP_TMDB_MAX_UPDATES: ${TMDB_MAX_UPDATES:-0}
     ports:
       - "${IMDB_HTTP_PORT:-8088}:8088"
     volumes:

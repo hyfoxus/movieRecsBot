@@ -11,13 +11,12 @@ import java.util.regex.Pattern;
 
 public final class ActorMentionExtractor {
 
-    private static final Pattern MULTI_WORD_NAME = Pattern.compile(
-            "(?:(?<=^)|(?<=\\s|[,.:;!?]))([\\p{Lu}][\\p{L}'-]+(?:\\s+[\\p{Lu}][\\p{L}'-]+)+)",
-            Pattern.UNICODE_CASE
+    private static final Pattern TITLE_CASE_NAME = Pattern.compile(
+            "(?:(?<=^)|(?<=\\s|[,.:;!?]))([\\p{Lu}][\\p{L}'-]+(?:\\s+[\\p{Lu}][\\p{L}'-]+)+)"
     );
 
     private static final Pattern HINTED_LOWERCASE_NAME = Pattern.compile(
-            "(?iu)(?:\\bwith\\b|\\bactors?\\b|\\bактерами\\b|\\bактёрами\\b|\\bактрисами\\b|(?<!\\p{L})с(?=\\s))\\s+([\\p{L}][\\p{L}'-]+(?:\\s+[\\p{L}][\\p{L}'-]+){1,3})"
+            "(?iu)(?:\\bwith\\b|\\bactors?\\b|\\bактерами\\b|\\bактёрами\\b|\\bактрисами\\b|(?<!\\p{L})с(?=\\s))\\s+([\\p{L}][\\p{L}'-]+(?:\\s+[\\p{L}][\\p{L}'-]+){1,7})"
     );
 
     private static final Set<String> TRAILING_STOPWORDS = Set.of(
@@ -28,12 +27,17 @@ public final class ActorMentionExtractor {
     private ActorMentionExtractor() {
     }
 
+    private static final Pattern CONNECTOR_SPLIT = Pattern.compile(
+            "\\s*(?:,|/|\\band\\b|\\bor\\b|\\bamp\\b|\\bwith\\b|&|\\+|\\bи\\b|\\bили\\b)\\s*",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
     public static Set<String> extract(String text) {
         Set<String> names = new LinkedHashSet<>();
         if (text == null || text.isBlank()) {
             return names;
         }
-        collectMatches(MULTI_WORD_NAME.matcher(text), names);
+        collectMatches(TITLE_CASE_NAME.matcher(text), names);
         collectMatches(HINTED_LOWERCASE_NAME.matcher(text), names);
         return names;
     }
@@ -44,15 +48,18 @@ public final class ActorMentionExtractor {
             if (candidate == null) {
                 continue;
             }
-            String normalized = candidate.trim().replaceAll("\\s+", " ");
-            if (normalized.length() < 4) {
-                continue;
+            List<String> fragments = splitCompositeCandidate(candidate);
+            for (String fragment : fragments) {
+                String normalized = fragment.trim().replaceAll("\\s+", " ");
+                if (normalized.length() < 4) {
+                    continue;
+                }
+                String cleaned = stripTrailingStopwords(normalized);
+                if (wordCount(cleaned) < 2) {
+                    continue;
+                }
+                names.add(toTitleCase(cleaned));
             }
-            String cleaned = stripTrailingStopwords(normalized);
-            if (wordCount(cleaned) < 2) {
-                continue;
-            }
-            names.add(toTitleCase(cleaned));
         }
     }
 
@@ -84,6 +91,25 @@ public final class ActorMentionExtractor {
 
     private static String sanitizeToken(String token) {
         return token.replaceAll("^[^\\p{L}]+|[^\\p{L}]+$", "");
+    }
+
+    private static List<String> splitCompositeCandidate(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.isEmpty()) {
+            return List.of();
+        }
+        String[] parts = CONNECTOR_SPLIT.split(trimmed);
+        List<String> fragments = new ArrayList<>();
+        for (String part : parts) {
+            String clean = part.trim();
+            if (!clean.isEmpty()) {
+                fragments.add(clean);
+            }
+        }
+        if (fragments.isEmpty()) {
+            fragments.add(trimmed);
+        }
+        return fragments;
     }
 
     private static String toTitleCase(String value) {

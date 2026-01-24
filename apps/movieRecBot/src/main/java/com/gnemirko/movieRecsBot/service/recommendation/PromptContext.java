@@ -11,5 +11,6 @@ public record PromptContext(UserProfile profile,
                             String profileSummary,
                             String history,
                             String movieContext,
-                            List<MovieContextItem> catalogItems) {
+                            List<MovieContextItem> catalogItems,
+                            UserIntent userIntent) {
 }

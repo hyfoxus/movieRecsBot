@@ -33,6 +33,14 @@ public class RecommendationPromptBuilder {
         if (context.movieContext() != null && !context.movieContext().isBlank()) {
             builder.append(context.movieContext().trim()).append("\n\n");
         }
+        if (context.userIntent() != null) {
+            String summary = context.userIntent().summary();
+            if (summary != null && !summary.isBlank()) {
+                builder.append("Interpreted intent:\n")
+                        .append(summary.trim())
+                        .append("\n\n");
+            }
+        }
         builder.append("User: ").append(userText);
         return builder.toString();
     }

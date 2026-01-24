@@ -2,6 +2,7 @@ package com.gnemirko.movieRecsBot.mcp;
 
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
+import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,7 +47,17 @@ class MovieContextServiceTest {
                 List.of(new MovieContextItem.Person("nm1", "Actor One")),
                 Map.of("plot", "A calm evening tale")
         );
-        when(mcpClient.search(eq("Фильм на вечер | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(5)))
+        UserIntent intent = new UserIntent(
+                List.of("Keanu Reeves"),
+                List.of(),
+                List.of(),
+                List.of("moody"),
+                null,
+                "Фильм на вечер",
+                "Moody drama with Keanu Reeves"
+        );
+
+        when(mcpClient.search(eq("Фильм на вечер | Vibe: moody | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(5)))
                 .thenReturn(List.of(item));
 
         MovieContextService.ContextBlock block = service.buildContextBlock(
@@ -54,6 +65,7 @@ class MovieContextServiceTest {
                 "Prefers drama",
                 profile,
                 UserLanguage.fromIsoCode("ru"),
+                intent,
                 List.of("Keanu Reeves")
         );
 
@@ -68,6 +80,7 @@ class MovieContextServiceTest {
                 "",
                 null,
                 UserLanguage.fromIsoCode("en"),
+                UserIntent.empty(),
                 List.of()
         );
 

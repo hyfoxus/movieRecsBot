@@ -161,7 +161,8 @@ public class MovieSearchService {
             params.addValue("excGenres", String.join(",", request.excludeGenres()));
         }
 
-        if (!request.actors().isEmpty()) {
+        List<String> actorPatterns = buildActorPatterns(request.actors());
+        for (int i = 0; i < actorPatterns.size(); i++) {
             where.add("""
                     EXISTS (
                       SELECT 1
@@ -169,17 +170,11 @@ public class MovieSearchService {
                       JOIN person p ON p.id = mp.person_id
                       WHERE mp.movie_id = m.id
                         AND mp.category IN ('actor','actress')
-                        AND (%s)
+                        AND regexp_replace(LOWER(p.primary_name), '[^a-z0-9]', '', 'g')
+                            LIKE :actorPattern%s
                     )
-                    """.formatted(actorMatchClause(request.actors().size())));
-            for (int i = 0; i < request.actors().size(); i++) {
-                String normalized = sanitizeActorToken(request.actors().get(i));
-                if (normalized.isEmpty()) {
-                    params.addValue("actorPattern" + i, "%");
-                } else {
-                    params.addValue("actorPattern" + i, "%" + normalized + "%");
-                }
-            }
+                    """.formatted(i));
+            params.addValue("actorPattern" + i, actorPatterns.get(i));
         }
 
         String whereSql = String.join(" AND ", where);
@@ -289,15 +284,15 @@ public class MovieSearchService {
         return sb.toString();
     }
 
-    private String actorMatchClause(int actorCount) {
-        List<String> clauses = new ArrayList<>();
-        for (int i = 0; i < actorCount; i++) {
-            clauses.add("""
-                    regexp_replace(LOWER(p.primary_name), '[^a-z0-9]', '', 'g')
-                        LIKE :actorPattern%s
-                    """.formatted(i));
+    private List<String> buildActorPatterns(List<String> actors) {
+        if (actors == null || actors.isEmpty()) {
+            return List.of();
         }
-        return String.join(" OR ", clauses);
+        return actors.stream()
+                .map(this::sanitizeActorToken)
+                .filter(s -> !s.isEmpty())
+                .map(token -> "%" + token + "%")
+                .toList();
     }
 
     private String sanitizeActorToken(String raw) {

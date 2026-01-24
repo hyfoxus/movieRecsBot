@@ -173,10 +173,12 @@ public class MovieSearchService {
                     )
                     """.formatted(actorMatchClause(request.actors().size())));
             for (int i = 0; i < request.actors().size(); i++) {
-                String normalized = request.actors().get(i) == null
-                        ? ""
-                        : request.actors().get(i).toLowerCase(Locale.ROOT).trim();
-                params.addValue("actorPattern" + i, "%" + normalized + "%");
+                String normalized = sanitizeActorToken(request.actors().get(i));
+                if (normalized.isEmpty()) {
+                    params.addValue("actorPattern" + i, "%");
+                } else {
+                    params.addValue("actorPattern" + i, "%" + normalized + "%");
+                }
             }
         }
 
@@ -290,8 +292,19 @@ public class MovieSearchService {
     private String actorMatchClause(int actorCount) {
         List<String> clauses = new ArrayList<>();
         for (int i = 0; i < actorCount; i++) {
-            clauses.add("LOWER(p.primary_name) LIKE LOWER(:actorPattern" + i + ")");
+            clauses.add("""
+                    regexp_replace(LOWER(p.primary_name), '[^a-z0-9]', '', 'g')
+                        LIKE :actorPattern%s
+                    """.formatted(i));
         }
         return String.join(" OR ", clauses);
+    }
+
+    private String sanitizeActorToken(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String ascii = raw.toLowerCase(Locale.ROOT);
+        return ascii.replaceAll("[^a-z0-9]", "");
     }
 }

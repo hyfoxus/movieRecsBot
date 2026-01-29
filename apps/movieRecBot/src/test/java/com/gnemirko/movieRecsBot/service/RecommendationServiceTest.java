@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -98,6 +99,35 @@ class RecommendationServiceTest {
         verify(userContextService).append(chatId, "User: movie for the evening");
         verify(userContextService).append(chatId, "Bot: List");
         verifyNoMoreInteractions(userContextService);
+    }
+
+    @Test
+    void replySkipsClarifierWhenActorConstraintsDetected() {
+        long chatId = 88L;
+        UserLanguage language = UserLanguage.fromIsoCode("ru");
+        NormalizedInput normalizedInput = new NormalizedInput("movie with al pacino", language);
+        when(textNormalizer.normalizeToEnglish("Фильм с Аль Пачино")).thenReturn(normalizedInput);
+
+        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino");
+        PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), intent);
+        when(promptContextBuilder.build(chatId, "movie with al pacino", language)).thenReturn(context);
+
+        when(promptBuilder.buildUserPrompt(context, "movie with al pacino")).thenReturn("userPrompt");
+        when(promptBuilder.buildRecommendationSystemPrompt(language, "movie with al pacino")).thenReturn("recommendationSystem");
+        when(recommendationModelClient.call("recommendationSystem", "userPrompt"))
+                .thenReturn("{\"movies\":[],\"reminder\":\"Share\"}");
+
+        RecommendationResponseParser.ParsedResponse parsedResponse = sampleParsedResponse();
+        when(recommendationResponseParser.parse(anyString(), any(), anyString(), any())).thenReturn(parsedResponse);
+        when(recommendationRenderer.render(parsedResponse)).thenReturn("<b>List</b>");
+
+        String reply = service.reply(chatId, "Фильм с Аль Пачино");
+
+        assertThat(reply).isEqualTo("<b>List</b>\n\n<i>Share</i>");
+        verify(promptBuilder, never()).buildQuestionSystemPrompt(any(), anyString());
+        verify(recommendationModelClient, times(1)).call(anyString(), eq("userPrompt"));
+        verify(dialogPolicy, never()).recommendNow(chatId, "movie with al pacino");
+        verify(dialogPolicy).reset(chatId);
     }
 
     private RecommendationResponseParser.ParsedResponse sampleParsedResponse() {

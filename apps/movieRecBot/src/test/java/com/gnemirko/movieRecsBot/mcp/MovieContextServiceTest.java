@@ -87,4 +87,51 @@ class MovieContextServiceTest {
         assertThat(block.block()).isEmpty();
         assertThat(block.items()).isEmpty();
     }
+
+    @Test
+    void buildContextBlockReturnsMovieForFiveActors() {
+        UserProfile profile = new UserProfile();
+        UserIntent intent = new UserIntent(
+                List.of("Leonardo DiCaprio", "Brad Pitt", "Margot Robbie", "Al Pacino", "Damian Lewis"),
+                List.of(),
+                List.of(),
+                List.of("retro"),
+                null,
+                "movie with those actors",
+                "Retro movie starring DiCaprio ensemble"
+        );
+
+        MovieContextItem item = new MovieContextItem(
+                "tt7131622",
+                "Once Upon a Time in... Hollywood",
+                2019,
+                7.6,
+                800000,
+                0.95,
+                List.of("Comedy", "Drama"),
+                List.of(new MovieContextItem.Person("nm0000138", "Leonardo DiCaprio")),
+                Map.of()
+        );
+
+        List<String> actors = List.of("Leonardo DiCaprio", "Brad Pitt", "Margot Robbie", "Al Pacino", "Damian Lewis");
+        when(mcpClient.search(
+                eq("movie with those actors | Vibe: retro | Retro movie starring DiCaprio ensemble"),
+                eq(List.of()),
+                eq(List.of()),
+                eq(actors),
+                eq(5)
+        )).thenReturn(List.of(item));
+
+        MovieContextService.ContextBlock block = service.buildContextBlock(
+                "movie with those actors",
+                "Retro movie starring DiCaprio ensemble",
+                profile,
+                UserLanguage.fromIsoCode("en"),
+                intent,
+                actors
+        );
+
+        assertThat(block.items()).hasSize(1);
+        assertThat(block.block()).contains("Once Upon a Time in... Hollywood");
+    }
 }

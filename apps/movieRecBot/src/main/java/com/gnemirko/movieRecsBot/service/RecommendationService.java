@@ -9,6 +9,7 @@ import com.gnemirko.movieRecsBot.service.recommendation.RecommendationModelClien
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationPromptBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationRenderer;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationResponseParser;
+import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +45,8 @@ public class RecommendationService {
 
         PromptContext context = promptContextBuilder.build(chatId, normalizedUserText, language);
         String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
-        Reply reply = dialogPolicy.recommendNow(chatId, normalizedUserText)
+        boolean skipClarifier = shouldSkipClarifier(context);
+        Reply reply = (skipClarifier || dialogPolicy.recommendNow(chatId, normalizedUserText))
                 ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
                 : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
 
@@ -111,5 +113,13 @@ public class RecommendationService {
     }
 
     private record Reply(String text, String reminder) {
+    }
+
+    private boolean shouldSkipClarifier(PromptContext context) {
+        if (context == null) {
+            return false;
+        }
+        UserIntent intent = context.userIntent();
+        return intent != null && intent.hasActors();
     }
 }

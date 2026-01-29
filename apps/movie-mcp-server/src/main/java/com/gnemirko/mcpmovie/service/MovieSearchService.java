@@ -195,7 +195,12 @@ public class MovieSearchService {
         Integer year = (Integer) rs.getObject("start_year");
         Double rating = (Double) rs.getObject("rating");
         Integer votes = (Integer) rs.getObject("votes");
-        Double similarity = (Double) rs.getObject("similarity");
+        Double similarity = null;
+        try {
+            similarity = (Double) rs.getObject("similarity");
+        } catch (SQLException ignored) {
+            // column is missing for fetchByTconst queries
+        }
         Array genresArray = rs.getArray("genres");
         List<String> genres = genresArray == null ? List.of() : readGenres(genresArray);
         String plot = rs.getString("plot");

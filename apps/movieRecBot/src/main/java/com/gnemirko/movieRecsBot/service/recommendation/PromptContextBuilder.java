@@ -49,19 +49,32 @@ public class PromptContextBuilder {
     }
 
     private List<String> resolveActorFilters(String userText, UserProfile profile, UserIntent intent) {
-        LinkedHashSet<String> filters = new LinkedHashSet<>();
+        LinkedHashSet<String> requested = new LinkedHashSet<>();
         if (intent != null && intent.actorNames() != null) {
-            filters.addAll(intent.actorNames());
+            requested.addAll(intent.actorNames());
         }
-        filters.addAll(ActorMentionExtractor.extract(userText));
+        requested.addAll(ActorMentionExtractor.extract(userText));
+        if (!requested.isEmpty()) {
+            return sanitizeActorFilters(requested);
+        }
+
+        LinkedHashSet<String> preferred = new LinkedHashSet<>();
         if (profile != null && profile.getLikedActors() != null) {
-            filters.addAll(profile.getLikedActors());
+            preferred.addAll(profile.getLikedActors());
         }
+        return sanitizeActorFilters(preferred);
+    }
+
+    private List<String> sanitizeActorFilters(LinkedHashSet<String> filters) {
         return filters.stream()
-                .map(String::trim)
+                .map(this::safeTrim)
                 .filter(s -> !s.isEmpty())
                 .limit(5)
                 .toList();
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private String buildProfileSummary(UserProfile profile) {

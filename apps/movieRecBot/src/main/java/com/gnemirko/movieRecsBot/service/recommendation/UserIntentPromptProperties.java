@@ -19,7 +19,9 @@ public class UserIntentPromptProperties {
               "descriptors": ["noir","slow burn"],
               "runtimeMinutes": 120,
               "rewrittenQuery": "short rewritten request highlighting key traits and context",
-              "summary": "one concise sentence describing what to search for"
+              "summary": "one concise sentence describing what to search for",
+              "intentType": "RECOMMENDATION or INFORMATION",
+              "requestedTitle": "Movie title only when the user asks for info about a specific movie"
             }
 
             RULES:
@@ -30,5 +32,7 @@ public class UserIntentPromptProperties {
             - summary must be human-readable (<=160 characters).
             - rewrittenQuery should stay short and include vibe/era hints for semantic search.
             - Never invent actors/genres not implied by the user or profile context.
+            - intentType must be INFORMATION only when the user clearly wants facts about a specific movie; otherwise RECOMMENDATION.
+            - requestedTitle must contain the exact movie title mentioned (without year) when intentType=INFORMATION, otherwise empty.
             """;
 }

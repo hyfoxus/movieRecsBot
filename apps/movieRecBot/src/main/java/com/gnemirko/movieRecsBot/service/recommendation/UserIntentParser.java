@@ -83,7 +83,9 @@ public class UserIntentParser {
             @JsonProperty("descriptors") List<String> descriptors,
             @JsonProperty("runtimeMinutes") Integer runtimeMinutes,
             @JsonProperty("rewrittenQuery") String rewrittenQuery,
-            @JsonProperty("summary") String summary
+            @JsonProperty("summary") String summary,
+            @JsonProperty("intentType") String intentType,
+            @JsonProperty("requestedTitle") String requestedTitle
     ) {
         UserIntent toDomain() {
             return new UserIntent(
@@ -93,7 +95,9 @@ public class UserIntentParser {
                     sanitizeList(descriptors),
                     runtimeMinutes,
                     safeTrim(rewrittenQuery),
-                    safeTrim(summary)
+                    safeTrim(summary),
+                    IntentType.fromString(intentType),
+                    safeTrim(requestedTitle)
             );
         }
 

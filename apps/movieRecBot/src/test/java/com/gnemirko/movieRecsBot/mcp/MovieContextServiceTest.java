@@ -2,6 +2,7 @@ package com.gnemirko.movieRecsBot.mcp;
 
 import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
+import com.gnemirko.movieRecsBot.service.recommendation.IntentType;
 import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,9 @@ class MovieContextServiceTest {
                 List.of("moody"),
                 null,
                 "Фильм на вечер",
-                "Moody drama with Keanu Reeves"
+                "Moody drama with Keanu Reeves",
+                IntentType.RECOMMENDATION,
+                ""
         );
 
         when(mcpClient.search(eq("Фильм на вечер | Vibe: moody | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(5)))
@@ -98,7 +101,9 @@ class MovieContextServiceTest {
                 List.of("retro"),
                 null,
                 "movie with those actors",
-                "Retro movie starring DiCaprio ensemble"
+                "Retro movie starring DiCaprio ensemble",
+                IntentType.RECOMMENDATION,
+                ""
         );
 
         MovieContextItem item = new MovieContextItem(

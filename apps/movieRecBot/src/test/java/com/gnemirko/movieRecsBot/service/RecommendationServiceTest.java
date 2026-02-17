@@ -5,6 +5,7 @@ import com.gnemirko.movieRecsBot.entity.UserProfile;
 import com.gnemirko.movieRecsBot.handler.DialogPolicy;
 import com.gnemirko.movieRecsBot.normalizer.NormalizedInput;
 import com.gnemirko.movieRecsBot.normalizer.TextNormalizer;
+import com.gnemirko.movieRecsBot.service.recommendation.IntentType;
 import com.gnemirko.movieRecsBot.service.recommendation.PromptContext;
 import com.gnemirko.movieRecsBot.service.recommendation.PromptContextBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationModelClient;
@@ -49,6 +50,8 @@ class RecommendationServiceTest {
     private DialogPolicy dialogPolicy;
     @Mock
     private UserContextService userContextService;
+    @Mock
+    private MovieInfoService movieInfoService;
 
     private RecommendationService service;
 
@@ -62,7 +65,8 @@ class RecommendationServiceTest {
                 recommendationRenderer,
                 textNormalizer,
                 dialogPolicy,
-                userContextService
+                userContextService,
+                movieInfoService
         );
     }
 
@@ -108,7 +112,7 @@ class RecommendationServiceTest {
         NormalizedInput normalizedInput = new NormalizedInput("movie with al pacino", language);
         when(textNormalizer.normalizeToEnglish("Фильм с Аль Пачино")).thenReturn(normalizedInput);
 
-        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino");
+        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino", IntentType.RECOMMENDATION, "");
         PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), intent);
         when(promptContextBuilder.build(chatId, "movie with al pacino", language)).thenReturn(context);
 
@@ -127,6 +131,36 @@ class RecommendationServiceTest {
         verify(promptBuilder, never()).buildQuestionSystemPrompt(any(), anyString());
         verify(recommendationModelClient, times(1)).call(anyString(), eq("userPrompt"));
         verify(dialogPolicy, never()).recommendNow(chatId, "movie with al pacino");
+        verify(dialogPolicy).reset(chatId);
+    }
+
+    @Test
+    void replyHandlesInformationIntent() {
+        long chatId = 55L;
+        UserLanguage language = UserLanguage.fromIsoCode("en");
+        NormalizedInput normalizedInput = new NormalizedInput("tell me about Heat", language);
+        when(textNormalizer.normalizeToEnglish("Tell me about Heat")).thenReturn(normalizedInput);
+
+        UserIntent infoIntent = new UserIntent(
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                "",
+                "",
+                IntentType.INFORMATION,
+                "Heat"
+        );
+        PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), infoIntent);
+        when(promptContextBuilder.build(chatId, "tell me about Heat", language)).thenReturn(context);
+        when(movieInfoService.describeMovie("Heat")).thenReturn("<b>Heat</b> (1995)");
+
+        String reply = service.reply(chatId, "Tell me about Heat");
+
+        assertThat(reply).isEqualTo("<b>Heat</b> (1995)");
+        verify(movieInfoService).describeMovie("Heat");
+        verifyNoMoreInteractions(promptBuilder, recommendationModelClient, recommendationResponseParser, recommendationRenderer);
         verify(dialogPolicy).reset(chatId);
     }
 

@@ -37,6 +37,7 @@ public class RecommendationService {
     private final TextNormalizer textNormalizer;
     private final DialogPolicy dialogPolicy;
     private final UserContextService userContextService;
+    private final MovieInfoService movieInfoService;
 
     public String reply(long chatId, String userText) {
         NormalizedInput normalized = textNormalizer.normalizeToEnglish(userText);
@@ -44,11 +45,16 @@ public class RecommendationService {
         UserLanguage language = normalized.language();
 
         PromptContext context = promptContextBuilder.build(chatId, normalizedUserText, language);
-        String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
-        boolean skipClarifier = shouldSkipClarifier(context);
-        Reply reply = (skipClarifier || dialogPolicy.recommendNow(chatId, normalizedUserText))
-                ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
-                : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
+        Reply reply;
+        if (shouldHandleInformationIntent(context)) {
+            reply = replyWithMovieInfo(chatId, context.userIntent());
+        } else {
+            String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
+            boolean skipClarifier = shouldSkipClarifier(context);
+            reply = (skipClarifier || dialogPolicy.recommendNow(chatId, normalizedUserText))
+                    ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
+                    : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
+        }
 
         userContextService.append(chatId, "User: " + normalizedUserText);
         userContextService.append(chatId, "Bot: " + htmlToPlain(reply.text()));
@@ -115,11 +121,24 @@ public class RecommendationService {
     private record Reply(String text, String reminder) {
     }
 
+    private Reply replyWithMovieInfo(long chatId, UserIntent intent) {
+        String text = movieInfoService.describeMovie(intent == null ? null : intent.requestedTitle());
+        dialogPolicy.reset(chatId);
+        return new Reply(text, "");
+    }
+
+    private boolean shouldHandleInformationIntent(PromptContext context) {
+        if (context == null || context.userIntent() == null) {
+            return false;
+        }
+        return context.userIntent().isInformationRequest();
+    }
+
     private boolean shouldSkipClarifier(PromptContext context) {
         if (context == null) {
             return false;
         }
         UserIntent intent = context.userIntent();
-        return intent != null && intent.hasActors();
+        return intent != null && intent.isRecommendationRequest() && intent.hasActors();
     }
 }

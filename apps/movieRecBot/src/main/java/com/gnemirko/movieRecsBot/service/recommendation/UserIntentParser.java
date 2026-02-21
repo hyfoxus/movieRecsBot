@@ -31,24 +31,13 @@ public class UserIntentParser {
         if (trimmed.isEmpty()) {
             return UserIntent.empty();
         }
-        String userPrompt = buildUserPrompt(trimmed, profileSummary, language);
-        try {
-            String response = chatClient
-                    .prompt()
-                    .system(properties.getSystemPrompt())
-                    .user(userPrompt)
-                    .call()
-                    .content();
-            log.debug("Intent parser raw response: {}", sanitizeForLog(response));
-            String clean = stripCodeFence(response);
-            IntentPayload payload = objectMapper.readValue(clean, IntentPayload.class);
-            UserIntent intent = payload.toDomain();
-            logParsedIntent(trimmed, intent, payload.explanations());
-            return intent;
-        } catch (Exception ex) {
-            log.debug("Failed to parse user intent for '{}': {}", trimmed, ex.getMessage());
-            return UserIntent.empty();
+        IntentClassification classification = classifyIntent(trimmed, profileSummary, language);
+        if (classification.isInformationIntent()) {
+            UserIntent infoIntent = classification.toInformationIntent();
+            logParsedIntent(trimmed, infoIntent, classification.reasoning());
+            return infoIntent;
         }
+        return extractRecommendationIntent(trimmed, profileSummary, language, classification);
     }
 
     private String buildUserPrompt(String userText,
@@ -149,6 +138,151 @@ public class UserIntentParser {
                     .map(val -> val.length() <= 1 ? val.toUpperCase(Locale.ROOT) : val)
                     .distinct()
                     .collect(Collectors.toList());
+        }
+
+        private String safeTrim(String value) {
+            return value == null ? "" : value.trim();
+        }
+    }
+
+    private IntentClassification classifyIntent(String userText,
+                                                String profileSummary,
+                                                UserLanguage language) {
+        String prompt = buildClassificationPrompt(userText, profileSummary, language);
+        try {
+            String response = chatClient
+                    .prompt()
+                    .system(properties.getClassificationPrompt())
+                    .user(prompt)
+                    .call()
+                    .content();
+            log.debug("Intent classifier raw response: {}", sanitizeForLog(response));
+            String clean = stripCodeFence(response);
+            IntentClassificationPayload payload = objectMapper.readValue(clean, IntentClassificationPayload.class);
+            IntentClassification classification = payload.toDomain();
+            log.debug(
+                    "Intent classifier parsed '{}' as type={}, title='{}', summary='{}', reasoning={}",
+                    sanitizeForLog(userText),
+                    classification.intentType(),
+                    sanitizeForLog(classification.requestedTitle()),
+                    sanitizeForLog(classification.summary()),
+                    classification.reasoning() == null || classification.reasoning().isEmpty() ? "<none>" : classification.reasoning()
+            );
+            return classification;
+        } catch (Exception ex) {
+            log.debug("Intent classification failed for '{}': {}", sanitizeForLog(userText), ex.getMessage());
+            return IntentClassification.recommendationFallback();
+        }
+    }
+
+    private String buildClassificationPrompt(String userText,
+                                             String profileSummary,
+                                             UserLanguage language) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("Language: ").append(language == null ? "en" : language.isoCode()).append("\n");
+        builder.append("User request:\n").append(userText).append("\n");
+        if (profileSummary != null && !profileSummary.isBlank()) {
+            builder.append("Profile summary:\n").append(profileSummary.trim()).append("\n");
+        }
+        builder.append("Classify whether user wants recommendations or information about a specific movie.");
+        return builder.toString();
+    }
+
+    private UserIntent extractRecommendationIntent(String userText,
+                                                   String profileSummary,
+                                                   UserLanguage language,
+                                                   IntentClassification classification) {
+        String userPrompt = buildUserPrompt(userText, profileSummary, language);
+        try {
+            String response = chatClient
+                    .prompt()
+                    .system(properties.getSystemPrompt())
+                    .user(userPrompt)
+                    .call()
+                    .content();
+            log.debug("Intent parser raw response: {}", sanitizeForLog(response));
+            String clean = stripCodeFence(response);
+            IntentPayload payload = objectMapper.readValue(clean, IntentPayload.class);
+            UserIntent intent = payload.toDomain();
+            logParsedIntent(userText, intent, payload.explanations());
+            return intent;
+        } catch (Exception ex) {
+            log.debug("Failed to parse recommendation intent for '{}': {}", sanitizeForLog(userText), ex.getMessage());
+            if (classification != null && classification.hasSummary()) {
+                UserIntent fallback = classification.toRecommendationIntent();
+                logParsedIntent(userText, fallback, classification.reasoning());
+                return fallback;
+            }
+            return UserIntent.empty();
+        }
+    }
+
+    private record IntentClassification(IntentType intentType,
+                                        String requestedTitle,
+                                        String summary,
+                                        List<String> reasoning) {
+        boolean isInformationIntent() {
+            return intentType == IntentType.INFORMATION && requestedTitle != null && !requestedTitle.isBlank();
+        }
+
+        boolean hasSummary() {
+            return summary != null && !summary.isBlank();
+        }
+
+        UserIntent toInformationIntent() {
+            String safeSummary = summary == null || summary.isBlank()
+                    ? "Information request about " + requestedTitle
+                    : summary;
+            return new UserIntent(
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    null,
+                    "",
+                    safeSummary,
+                    IntentType.INFORMATION,
+                    requestedTitle.trim()
+            );
+        }
+
+        UserIntent toRecommendationIntent() {
+            String safeSummary = summary == null ? "" : summary.trim();
+            return new UserIntent(
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    null,
+                    "",
+                    safeSummary,
+                    IntentType.RECOMMENDATION,
+                    ""
+            );
+        }
+
+        static IntentClassification recommendationFallback() {
+            return new IntentClassification(IntentType.RECOMMENDATION, "", "", List.of());
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record IntentClassificationPayload(
+            @JsonProperty("intentType") String intentType,
+            @JsonProperty("requestedTitle") String requestedTitle,
+            @JsonProperty("summary") String summary,
+            @JsonProperty("reasoning") List<String> reasoning
+    ) {
+        IntentClassification toDomain() {
+            return new IntentClassification(
+                    IntentType.fromString(intentType),
+                    safeTrim(requestedTitle),
+                    safeTrim(summary),
+                    reasoning == null ? List.of() : reasoning.stream()
+                            .map(this::safeTrim)
+                            .filter(s -> !s.isEmpty())
+                            .toList()
+            );
         }
 
         private String safeTrim(String value) {

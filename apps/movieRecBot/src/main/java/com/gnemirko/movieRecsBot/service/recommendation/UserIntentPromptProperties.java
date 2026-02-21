@@ -21,7 +21,8 @@ public class UserIntentPromptProperties {
               "rewrittenQuery": "short rewritten request highlighting key traits and context",
               "summary": "one concise sentence describing what to search for",
               "intentType": "RECOMMENDATION or INFORMATION",
-              "requestedTitle": "Movie title only when the user asks for info about a specific movie"
+              "requestedTitle": "Movie title only when the user asks for info about a specific movie",
+              "reasoning": ["short bullet(s) explaining the classification"]
             }
 
             RULES:
@@ -32,7 +33,9 @@ public class UserIntentPromptProperties {
             - summary must be human-readable (<=160 characters).
             - rewrittenQuery should stay short and include vibe/era hints for semantic search.
             - Never invent actors/genres not implied by the user or profile context.
-            - intentType must be INFORMATION only when the user clearly wants facts about a specific movie; otherwise RECOMMENDATION.
+            - INFORMATION intentType MUST be used whenever the user is asking for facts about a specific known movie (cast, plot, rating, runtime, trivia, "who played", "кто играл", "actors in", "tell me about", "что за фильм ..."). Always copy the exact movie title into requestedTitle.
+            - RECOMMENDATION intentType is only for open-ended discovery requests ("recommend", "подскажи фильм", mood/actor preferences without requesting facts about a known title).
             - requestedTitle must contain the exact movie title mentioned (without year) when intentType=INFORMATION, otherwise empty.
+            - reasoning should briefly justify why you chose the intent type (e.g., "user asked for actors of specific film" or "user wants suggestions resembling ...").
             """;
 }

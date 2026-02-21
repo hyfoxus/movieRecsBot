@@ -39,11 +39,14 @@ public class UserIntentParser {
                     .user(userPrompt)
                     .call()
                     .content();
+            log.debug("Intent parser raw response: {}", sanitizeForLog(response));
             String clean = stripCodeFence(response);
             IntentPayload payload = objectMapper.readValue(clean, IntentPayload.class);
-            return payload.toDomain();
+            UserIntent intent = payload.toDomain();
+            logParsedIntent(trimmed, intent, payload.explanations());
+            return intent;
         } catch (Exception ex) {
-            log.debug("Failed to parse user intent: {}", ex.getMessage());
+            log.debug("Failed to parse user intent for '{}': {}", trimmed, ex.getMessage());
             return UserIntent.empty();
         }
     }
@@ -75,6 +78,32 @@ public class UserIntentParser {
         return text.trim();
     }
 
+    private void logParsedIntent(String userText, UserIntent intent, List<String> explanations) {
+        if (!log.isDebugEnabled()) {
+            return;
+        }
+        log.debug(
+                "Parsed intent for '{}': type={}, title='{}', actors={}, includeGenres={}, excludeGenres={}, descriptors={}, runtime={}, summary='{}', explanations={}",
+                sanitizeForLog(userText),
+                intent.intentType(),
+                sanitizeForLog(intent.requestedTitle()),
+                intent.actorNames(),
+                intent.includeGenres(),
+                intent.excludeGenres(),
+                intent.descriptors(),
+                intent.runtimeMinutes(),
+                sanitizeForLog(intent.summary()),
+                explanations == null || explanations.isEmpty() ? "<none>" : explanations
+        );
+    }
+
+    private String sanitizeForLog(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replaceAll("\\s+", " ").trim();
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record IntentPayload(
             @JsonProperty("actors") List<String> actors,
@@ -85,7 +114,8 @@ public class UserIntentParser {
             @JsonProperty("rewrittenQuery") String rewrittenQuery,
             @JsonProperty("summary") String summary,
             @JsonProperty("intentType") String intentType,
-            @JsonProperty("requestedTitle") String requestedTitle
+            @JsonProperty("requestedTitle") String requestedTitle,
+            @JsonProperty("reasoning") List<String> explanations
     ) {
         UserIntent toDomain() {
             return new UserIntent(

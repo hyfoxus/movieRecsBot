@@ -112,7 +112,7 @@ class RecommendationServiceTest {
         NormalizedInput normalizedInput = new NormalizedInput("movie with al pacino", language);
         when(textNormalizer.normalizeToEnglish("Фильм с Аль Пачино")).thenReturn(normalizedInput);
 
-        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino", IntentType.RECOMMENDATION, "", null);
+        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino", IntentType.RECOMMENDATION, "", null, null);
         PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), intent);
         when(promptContextBuilder.build(chatId, "movie with al pacino", language)).thenReturn(context);
 
@@ -151,7 +151,8 @@ class RecommendationServiceTest {
                 "",
                 IntentType.INFORMATION,
                 "Heat",
-                1995
+                1995,
+                null
         );
         PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), infoIntent);
         when(promptContextBuilder.build(chatId, "tell me about Heat", language)).thenReturn(context);

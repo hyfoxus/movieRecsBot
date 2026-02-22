@@ -11,10 +11,11 @@ public record UserIntent(List<String> actorNames,
                          String summary,
                          IntentType intentType,
                          String requestedTitle,
-                         Integer requestedYear) {
+                         Integer requestedYear,
+                         Integer releaseYearFrom) {
 
     public static UserIntent empty() {
-        return new UserIntent(List.of(), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "", null);
+        return new UserIntent(List.of(), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "", null, null);
     }
 
     public boolean hasActors() {

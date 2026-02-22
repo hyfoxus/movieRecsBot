@@ -58,7 +58,8 @@ public class MovieContextService {
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList()));
 
-        List<MovieContextItem> items = mcpClient.search(query.trim(), includeGenres, excludeGenres, actorFilters, 5);
+        Integer fromYear = intent == null ? null : intent.releaseYearFrom();
+        List<MovieContextItem> items = mcpClient.search(query.trim(), includeGenres, excludeGenres, actorFilters, fromYear, 5);
         if (items.isEmpty()) {
             return ContextBlock.empty();
         }
@@ -85,6 +86,7 @@ public class MovieContextService {
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList(),
+                    year,
                     5);
             if (year != null) {
                 return matches.stream()

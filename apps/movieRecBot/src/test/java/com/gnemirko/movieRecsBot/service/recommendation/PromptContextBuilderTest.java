@@ -49,7 +49,7 @@ class PromptContextBuilderTest {
         when(userProfileService.getOrCreate(chatId)).thenReturn(profile);
         when(userContextService.historyAsOneString(chatId, 30, 300)).thenReturn("");
 
-        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "", null);
+        UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "", null, null);
         when(userIntentParser.parse(eq("movie with al pacino"), anyString(), eq(language))).thenReturn(intent);
         when(movieContextService.buildContextBlock(anyString(), anyString(), eq(profile), eq(language), eq(intent), any()))
                 .thenReturn(MovieContextService.ContextBlock.empty());

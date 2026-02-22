@@ -122,7 +122,9 @@ public class RecommendationService {
     }
 
     private Reply replyWithMovieInfo(long chatId, UserIntent intent) {
-        String text = movieInfoService.describeMovie(intent == null ? null : intent.requestedTitle());
+        String text = movieInfoService.describeMovie(
+                intent == null ? null : intent.requestedTitle(),
+                intent == null ? null : intent.requestedYear());
         dialogPolicy.reset(chatId);
         return new Reply(text, "");
     }

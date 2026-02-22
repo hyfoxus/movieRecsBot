@@ -46,6 +46,7 @@ public class UserIntentPromptProperties {
             {
               "intentType": "RECOMMENDATION or INFORMATION",
               "requestedTitle": "Exact movie title when INFORMATION, otherwise empty string",
+              "requestedYear": 0,
               "summary": "Short sentence describing what the user wants",
               "reasoning": ["bullet list describing how you decided"]
             }
@@ -53,8 +54,9 @@ public class UserIntentPromptProperties {
             RULES:
             - Return ONLY JSON. No prose, no code fences.
             - INFORMATION intentType MUST be used whenever the user references a specific movie to learn about (cast, plot, rating, trivia, etc.).
-            - RECOMMENDATION intentType is only for open-ended discovery/help deciding what to watch.
+            - RECOMMENDATION intentType must be used whenever the user is looking for a list/set of movies to watch (e.g., "назови три свежих фильма...", "top movies with <actor>", "recommend", "подскажи фильм"), even if they mention an actor or era. Lists/searches always imply discovery, not information.
             - requestedTitle must capture the precise movie title mentioned when INFORMATION (omit year and quotes). If multiple titles appear, choose the one the user wants details about.
+            - requestedYear should be the release year mentioned by the user (integer). Use null when the user did not specify a year.
             - summary should stay under 160 characters.
             - reasoning should capture the clues (e.g., "user asked who played in <title>" or "user wants suggestions with actor preferences").
 
@@ -63,6 +65,7 @@ public class UserIntentPromptProperties {
             {
               "intentType": "INFORMATION",
               "requestedTitle": "Once Upon a Time in Hollywood",
+              "requestedYear": 2019,
               "summary": "User wants the cast list for Once Upon a Time in Hollywood.",
               "reasoning": ["phrase 'кто играл' means 'who played', a factual request"]
             }
@@ -71,8 +74,18 @@ public class UserIntentPromptProperties {
             {
               "intentType": "RECOMMENDATION",
               "requestedTitle": "",
+              "requestedYear": null,
               "summary": "User wants a comedy recommendation starring Al Pacino.",
               "reasoning": ["user requested a movie suggestion with actor preference"]
+            }
+
+            User: "Назови три самых свежих фильма, где играет Кевин Костнер"
+            {
+              "intentType": "RECOMMENDATION",
+              "requestedTitle": "",
+              "requestedYear": null,
+              "summary": "User wants the latest movies starring Kevin Costner to watch.",
+              "reasoning": ["user asked for three movies to watch, not facts about one title"]
             }
             """;
 }

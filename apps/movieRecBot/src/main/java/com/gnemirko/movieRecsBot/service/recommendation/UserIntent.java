@@ -10,10 +10,11 @@ public record UserIntent(List<String> actorNames,
                          String rewrittenQuery,
                          String summary,
                          IntentType intentType,
-                         String requestedTitle) {
+                         String requestedTitle,
+                         Integer requestedYear) {
 
     public static UserIntent empty() {
-        return new UserIntent(List.of(), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "");
+        return new UserIntent(List.of(), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "", null);
     }
 
     public boolean hasActors() {

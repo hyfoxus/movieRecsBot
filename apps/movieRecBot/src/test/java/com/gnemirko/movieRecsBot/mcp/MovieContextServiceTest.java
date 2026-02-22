@@ -57,7 +57,8 @@ class MovieContextServiceTest {
                 "Фильм на вечер",
                 "Moody drama with Keanu Reeves",
                 IntentType.RECOMMENDATION,
-                ""
+                "",
+                null
         );
 
         when(mcpClient.search(eq("Фильм на вечер | Vibe: moody | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(5)))
@@ -103,7 +104,8 @@ class MovieContextServiceTest {
                 "movie with those actors",
                 "Retro movie starring DiCaprio ensemble",
                 IntentType.RECOMMENDATION,
-                ""
+                "",
+                null
         );
 
         MovieContextItem item = new MovieContextItem(

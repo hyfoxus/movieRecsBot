@@ -19,11 +19,11 @@ public class MovieInfoService {
 
     private final MovieContextService movieContextService;
 
-    public String describeMovie(String requestedTitle) {
+    public String describeMovie(String requestedTitle, Integer requestedYear) {
         if (requestedTitle == null || requestedTitle.isBlank()) {
             return "Мне нужна конкретная картина: назови, пожалуйста, фильм.";
         }
-        Optional<MovieContextItem> match = movieContextService.lookupByTitle(requestedTitle);
+        Optional<MovieContextItem> match = movieContextService.lookupByTitle(requestedTitle, requestedYear);
         return match
                 .map(this::formatMovie)
                 .orElseGet(() ->

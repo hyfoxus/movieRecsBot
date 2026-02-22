@@ -72,10 +72,11 @@ public class UserIntentParser {
             return;
         }
         log.debug(
-                "Parsed intent for '{}': type={}, title='{}', actors={}, includeGenres={}, excludeGenres={}, descriptors={}, runtime={}, summary='{}', explanations={}",
+                "Parsed intent for '{}': type={}, title='{}', year={}, actors={}, includeGenres={}, excludeGenres={}, descriptors={}, runtime={}, summary='{}', explanations={}",
                 sanitizeForLog(userText),
                 intent.intentType(),
                 sanitizeForLog(intent.requestedTitle()),
+                intent.requestedYear(),
                 intent.actorNames(),
                 intent.includeGenres(),
                 intent.excludeGenres(),
@@ -116,7 +117,8 @@ public class UserIntentParser {
                     safeTrim(rewrittenQuery),
                     safeTrim(summary),
                     IntentType.fromString(intentType),
-                    safeTrim(requestedTitle)
+                    safeTrim(requestedTitle),
+                    null
             );
         }
 
@@ -161,10 +163,11 @@ public class UserIntentParser {
             IntentClassificationPayload payload = objectMapper.readValue(clean, IntentClassificationPayload.class);
             IntentClassification classification = payload.toDomain();
             log.debug(
-                    "Intent classifier parsed '{}' as type={}, title='{}', summary='{}', reasoning={}",
+                    "Intent classifier parsed '{}' as type={}, title='{}', year={}, summary='{}', reasoning={}",
                     sanitizeForLog(userText),
                     classification.intentType(),
                     sanitizeForLog(classification.requestedTitle()),
+                    classification.requestedYear(),
                     sanitizeForLog(classification.summary()),
                     classification.reasoning() == null || classification.reasoning().isEmpty() ? "<none>" : classification.reasoning()
             );
@@ -219,6 +222,7 @@ public class UserIntentParser {
 
     private record IntentClassification(IntentType intentType,
                                         String requestedTitle,
+                                        Integer requestedYear,
                                         String summary,
                                         List<String> reasoning) {
         boolean isInformationIntent() {
@@ -242,7 +246,8 @@ public class UserIntentParser {
                     "",
                     safeSummary,
                     IntentType.INFORMATION,
-                    requestedTitle.trim()
+                    requestedTitle.trim(),
+                    requestedYear
             );
         }
 
@@ -257,12 +262,13 @@ public class UserIntentParser {
                     "",
                     safeSummary,
                     IntentType.RECOMMENDATION,
-                    ""
+                    "",
+                    null
             );
         }
 
         static IntentClassification recommendationFallback() {
-            return new IntentClassification(IntentType.RECOMMENDATION, "", "", List.of());
+            return new IntentClassification(IntentType.RECOMMENDATION, "", null, "", List.of());
         }
     }
 
@@ -270,6 +276,7 @@ public class UserIntentParser {
     private record IntentClassificationPayload(
             @JsonProperty("intentType") String intentType,
             @JsonProperty("requestedTitle") String requestedTitle,
+            @JsonProperty("requestedYear") Integer requestedYear,
             @JsonProperty("summary") String summary,
             @JsonProperty("reasoning") List<String> reasoning
     ) {
@@ -277,6 +284,7 @@ public class UserIntentParser {
             return new IntentClassification(
                     IntentType.fromString(intentType),
                     safeTrim(requestedTitle),
+                    requestedYear,
                     safeTrim(summary),
                     reasoning == null ? List.of() : reasoning.stream()
                             .map(this::safeTrim)

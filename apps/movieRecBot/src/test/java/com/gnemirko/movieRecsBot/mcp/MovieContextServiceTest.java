@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,10 +59,12 @@ class MovieContextServiceTest {
                 "Фильм на вечер",
                 "Moody drama with Keanu Reeves",
                 IntentType.RECOMMENDATION,
-                ""
+                "",
+                null,
+                null
         );
 
-        when(mcpClient.search(eq("Фильм на вечер | Vibe: moody | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(5)))
+        when(mcpClient.search(eq("Фильм на вечер | Vibe: moody | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(null), eq(5)))
                 .thenReturn(List.of(item));
 
         MovieContextService.ContextBlock block = service.buildContextBlock(
@@ -103,7 +107,9 @@ class MovieContextServiceTest {
                 "movie with those actors",
                 "Retro movie starring DiCaprio ensemble",
                 IntentType.RECOMMENDATION,
-                ""
+                "",
+                null,
+                2025
         );
 
         MovieContextItem item = new MovieContextItem(
@@ -124,6 +130,7 @@ class MovieContextServiceTest {
                 eq(List.of()),
                 eq(List.of()),
                 eq(actors),
+                eq(2025),
                 eq(5)
         )).thenReturn(List.of(item));
 
@@ -138,5 +145,26 @@ class MovieContextServiceTest {
 
         assertThat(block.items()).hasSize(1);
         assertThat(block.block()).contains("Once Upon a Time in... Hollywood");
+    }
+
+    @Test
+    void buildContextBlockFallsBackToProfileWhenNoRecency() {
+        UserProfile profile = new UserProfile();
+        profile.getLikedGenres().add("Drama");
+        UserIntent intent = new UserIntent(
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                "",
+                "",
+                IntentType.RECOMMENDATION,
+                "",
+                null,
+                null
+        );
+        service.buildContextBlock("anything", "", profile, UserLanguage.fromIsoCode("en"), intent, List.of());
+        verify(mcpClient).search(anyString(), anyList(), anyList(), anyList(), eq(null), eq(5));
     }
 }

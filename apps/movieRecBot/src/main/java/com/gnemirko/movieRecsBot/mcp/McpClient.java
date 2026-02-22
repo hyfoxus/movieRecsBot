@@ -44,8 +44,9 @@ public class McpClient {
                                          List<String> includeGenres,
                                          List<String> excludeGenres,
                                          List<String> actorFilters,
+                                         Integer fromYear,
                                          int limit) {
-        Map<String, Object> arguments = buildArguments(query, includeGenres, excludeGenres, actorFilters, limit);
+        Map<String, Object> arguments = buildArguments(query, includeGenres, excludeGenres, actorFilters, fromYear, limit);
         int totalAttempts = MAX_TIMEOUT_RETRIES + 1;
         for (int attempt = 1; attempt <= totalAttempts; attempt++) {
             try {
@@ -66,6 +67,7 @@ public class McpClient {
                                                List<String> includeGenres,
                                                List<String> excludeGenres,
                                                List<String> actorFilters,
+                                               Integer fromYear,
                                                int limit) {
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("query", query);
@@ -78,6 +80,9 @@ public class McpClient {
         }
         if (actorFilters != null && !actorFilters.isEmpty()) {
             arguments.put("actors", actorFilters);
+        }
+        if (fromYear != null && fromYear > 0) {
+            arguments.put("fromYear", fromYear);
         }
         return arguments;
     }

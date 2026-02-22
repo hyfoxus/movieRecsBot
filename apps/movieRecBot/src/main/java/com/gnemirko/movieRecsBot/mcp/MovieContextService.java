@@ -58,7 +58,8 @@ public class MovieContextService {
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList()));
 
-        List<MovieContextItem> items = mcpClient.search(query.trim(), includeGenres, excludeGenres, actorFilters, 5);
+        Integer fromYear = intent == null ? null : intent.releaseYearFrom();
+        List<MovieContextItem> items = mcpClient.search(query.trim(), includeGenres, excludeGenres, actorFilters, fromYear, 5);
         if (items.isEmpty()) {
             return ContextBlock.empty();
         }
@@ -75,12 +76,24 @@ public class MovieContextService {
         return new ContextBlock(block.toString().trim(), items);
     }
 
-    public Optional<MovieContextItem> lookupByTitle(String title) {
+    public Optional<MovieContextItem> lookupByTitle(String title, Integer year) {
         if (title == null || title.isBlank()) {
             return Optional.empty();
         }
         try {
-            List<MovieContextItem> matches = mcpClient.search(title.trim(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), 1);
+            List<MovieContextItem> matches = mcpClient.search(
+                    buildLookupQuery(title, year),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    year,
+                    5);
+            if (year != null) {
+                return matches.stream()
+                        .filter(item -> item.year() != null && item.year().equals(year))
+                        .findFirst()
+                        .or(() -> matches.stream().findFirst());
+            }
             if (matches.isEmpty()) {
                 return Optional.empty();
             }
@@ -89,6 +102,13 @@ public class MovieContextService {
             log.warn("Failed to look up movie '{}' via MCP: {}", title, ex.getMessage());
             return Optional.empty();
         }
+    }
+
+    private String buildLookupQuery(String title, Integer year) {
+        if (year == null) {
+            return title.trim();
+        }
+        return (title + " " + year).trim();
     }
 
     private String contextHeader(UserLanguage language) {

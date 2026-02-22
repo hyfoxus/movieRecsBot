@@ -42,9 +42,9 @@ class MovieInfoServiceTest {
                 List.of(new MovieContextItem.Person("nm0000199", "Robert De Niro")),
                 Map.of("plot", "Thief vs cop in LA.", "runtimeMinutes", 170)
         );
-        when(movieContextService.lookupByTitle("Heat")).thenReturn(Optional.of(item));
+        when(movieContextService.lookupByTitle("Heat", 1995)).thenReturn(Optional.of(item));
 
-        String reply = service.describeMovie("Heat");
+        String reply = service.describeMovie("Heat", 1995);
 
         assertThat(reply)
                 .contains("<b>Heat (1995)</b>")
@@ -52,21 +52,43 @@ class MovieInfoServiceTest {
                 .contains("Жанры: Crime, Drama")
                 .contains("В ролях: Robert De Niro")
                 .contains("IMDb ID: tt0113277");
-        verify(movieContextService).lookupByTitle("Heat");
+        verify(movieContextService).lookupByTitle("Heat", 1995);
     }
 
     @Test
     void describeMovieHandlesMisses() {
-        when(movieContextService.lookupByTitle("Unknown")).thenReturn(Optional.empty());
+        when(movieContextService.lookupByTitle("Unknown", null)).thenReturn(Optional.empty());
 
-        String reply = service.describeMovie("Unknown");
+        String reply = service.describeMovie("Unknown", null);
 
         assertThat(reply).contains("Unknown");
     }
 
     @Test
     void describeMovieRequiresTitle() {
-        String reply = service.describeMovie("   ");
+        String reply = service.describeMovie("   ", null);
         assertThat(reply).contains("назови");
+    }
+
+    @Test
+    void describeMovieFallsBackWhenYearMismatch() {
+        MovieContextItem item2019 = new MovieContextItem(
+                "tt6412452",
+                "The Highwaymen",
+                2019,
+                6.8,
+                160000,
+                0.95,
+                List.of("Crime", "Drama"),
+                List.of(),
+                Map.of()
+        );
+        when(movieContextService.lookupByTitle("The Highwaymen", 2018))
+                .thenReturn(Optional.of(item2019));
+
+        String reply = service.describeMovie("The Highwaymen", 2018);
+
+        assertThat(reply).contains("The Highwaymen");
+        verify(movieContextService).lookupByTitle("The Highwaymen", 2018);
     }
 }

@@ -6,6 +6,7 @@ import com.gnemirko.mcpmovie.model.ContentBlock;
 import com.gnemirko.mcpmovie.model.McpManifest;
 import com.gnemirko.mcpmovie.model.McpToolResponse;
 import com.gnemirko.mcpmovie.model.MovieContext;
+import com.gnemirko.mcpmovie.model.MovieLookupRequest;
 import com.gnemirko.mcpmovie.model.MovieSearchRequest;
 import com.gnemirko.mcpmovie.model.ResourcePointer;
 import com.gnemirko.mcpmovie.model.ResourceQuery;
@@ -38,7 +39,8 @@ import java.util.Map;
 @RestController
 public class McpController {
 
-    private static final String TOOL_NAME = "movie.search";
+    private static final String SEARCH_TOOL = "movie.search";
+    private static final String LOOKUP_TOOL = "movie.lookup";
     private static final String MOVIE_URI_PREFIX = "imdb://movie/";
 
     private final MovieSearchService movieService;
@@ -64,9 +66,13 @@ public class McpController {
                 properties.version(),
                 properties.description(),
                 List.of(new McpManifest.McpTool(
-                        TOOL_NAME,
+                        SEARCH_TOOL,
                         "Vector-based movie search over the IMDb subset.",
                         buildSearchSchema()
+                ), new McpManifest.McpTool(
+                        LOOKUP_TOOL,
+                        "Deterministic lookup by exact title and optional year.",
+                        buildLookupSchema()
                 )),
                 List.of(new McpManifest.McpResource(
                         MOVIE_URI_PREFIX + "{tconst}",
@@ -78,24 +84,11 @@ public class McpController {
 
     @PostMapping("/mcp/v1/tools")
     public Mono<McpToolResponse> invokeTool(@Valid @RequestBody ToolInvocation invocation) {
-        if (!TOOL_NAME.equals(invocation.name())) {
-            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Tool not found"));
-        }
-        return Mono.fromCallable(() -> {
-                    MovieSearchRequest request = convertArguments(invocation.arguments());
-                    List<MovieContext> results = movieService.search(request);
-                    List<ContentBlock> content = List.of(
-                            ContentBlock.text(String.format(
-                                    Locale.ROOT,
-                                    "Top %d matches for query '%s'.",
-                                    results.size(),
-                                    request.query()
-                            )),
-                            ContentBlock.json(results)
-                    );
-                    return new McpToolResponse(content);
-                })
-                .subscribeOn(blockingScheduler);
+        return switch (invocation.name()) {
+            case SEARCH_TOOL -> handleSearch(invocation);
+            case LOOKUP_TOOL -> handleLookup(invocation);
+            default -> Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Tool not found"));
+        };
     }
 
     @PostMapping("/mcp/v1/resources/query")
@@ -140,8 +133,60 @@ public class McpController {
                 .subscribeOn(blockingScheduler);
     }
 
+    private Mono<McpToolResponse> handleSearch(ToolInvocation invocation) {
+        return Mono.fromCallable(() -> {
+                    MovieSearchRequest request = convertArguments(invocation.arguments());
+                    List<MovieContext> results = movieService.search(request);
+                    List<ContentBlock> content = List.of(
+                            ContentBlock.text(String.format(
+                                    Locale.ROOT,
+                                    "Top %d matches for query '%s'.",
+                                    results.size(),
+                                    request.query()
+                            )),
+                            ContentBlock.json(results)
+                    );
+                    return new McpToolResponse(content);
+                })
+                .subscribeOn(blockingScheduler);
+    }
+
+    private Mono<McpToolResponse> handleLookup(ToolInvocation invocation) {
+        return Mono.fromCallable(() -> {
+                    MovieLookupRequest request = convertLookupArguments(invocation.arguments());
+                    return movieService.lookupByTitle(request.title(), request.year())
+                            .map(movie -> new McpToolResponse(List.of(
+                                    ContentBlock.text(String.format(
+                                            Locale.ROOT,
+                                            "Lookup result for '%s'%s.",
+                                            request.title(),
+                                            request.year() == null ? "" : " (" + request.year() + ")"
+                                    )),
+                                    ContentBlock.json(movie)
+                            )))
+                            .orElseGet(() -> new McpToolResponse(List.of(
+                                    ContentBlock.text(String.format(
+                                            Locale.ROOT,
+                                            "Movie '%s'%s not found.",
+                                            request.title(),
+                                            request.year() == null ? "" : " (" + request.year() + ")"
+                                    ))
+                            )));
+                })
+                .subscribeOn(blockingScheduler);
+    }
+
     private MovieSearchRequest convertArguments(Map<String, Object> arguments) {
         MovieSearchRequest request = objectMapper.convertValue(arguments, MovieSearchRequest.class);
+        var violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
+        return request;
+    }
+
+    private MovieLookupRequest convertLookupArguments(Map<String, Object> arguments) {
+        MovieLookupRequest request = objectMapper.convertValue(arguments, MovieLookupRequest.class);
         var violations = validator.validate(request);
         if (!violations.isEmpty()) {
             throw new ConstraintViolationException(violations);
@@ -197,6 +242,24 @@ public class McpController {
         return Map.of(
                 "type", "object",
                 "required", List.of("query"),
+                "properties", properties
+        );
+    }
+
+    private Map<String, Object> buildLookupSchema() {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("title", Map.of(
+                "type", "string",
+                "description", "Exact movie title to fetch (case-insensitive)."
+        ));
+        properties.put("year", Map.of(
+                "type", "integer",
+                "minimum", 1888,
+                "description", "Optional release year to disambiguate."
+        ));
+        return Map.of(
+                "type", "object",
+                "required", List.of("title"),
                 "properties", properties
         );
     }

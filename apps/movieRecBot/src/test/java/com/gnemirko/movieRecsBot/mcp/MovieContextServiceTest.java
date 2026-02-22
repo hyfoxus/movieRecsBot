@@ -12,11 +12,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -166,5 +168,55 @@ class MovieContextServiceTest {
         );
         service.buildContextBlock("anything", "", profile, UserLanguage.fromIsoCode("en"), intent, List.of());
         verify(mcpClient).search(anyString(), anyList(), anyList(), anyList(), eq(null), eq(5));
+    }
+
+    @Test
+    void lookupByTitleUsesDeterministicLookup() {
+        MovieContextItem match = new MovieContextItem(
+                "tt9620292",
+                "Let Him Go",
+                2020,
+                6.7,
+                40000,
+                0.99,
+                List.of(),
+                List.of(),
+                Map.of()
+        );
+        when(mcpClient.lookupExact("Let Him Go", 2020)).thenReturn(Optional.of(match));
+
+        Optional<MovieContextItem> result = service.lookupByTitle("Let Him Go", 2020);
+
+        assertThat(result).contains(match);
+        verify(mcpClient).lookupExact("Let Him Go", 2020);
+        verifyNoMoreInteractions(mcpClient);
+    }
+
+    @Test
+    void lookupByTitleFallsBackToSearchWhenExactMissing() {
+        when(mcpClient.lookupExact("Let Him Go", 2020)).thenReturn(Optional.empty());
+        MovieContextItem match = new MovieContextItem(
+                "tt9620292",
+                "Let Him Go",
+                2020,
+                6.7,
+                40000,
+                0.99,
+                List.of(),
+                List.of(),
+                Map.of()
+        );
+        when(mcpClient.search(
+                eq("Let Him Go 2020"),
+                eq(List.of()),
+                eq(List.of()),
+                eq(List.of()),
+                eq(2020),
+                eq(5)
+        )).thenReturn(List.of(match));
+
+        Optional<MovieContextItem> result = service.lookupByTitle("Let Him Go", 2020);
+
+        assertThat(result).contains(match);
     }
 }

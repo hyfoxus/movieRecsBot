@@ -87,6 +87,26 @@ public class MovieSearchService {
             WHERE m.tconst = :tconst
             """;
 
+    private static final String LOOKUP_SQL = """
+            SELECT m.tconst, m.primary_title, m.start_year, m.rating, m.votes, m.genres,
+                   m.plot, m.title_type, m.runtime_minutes, m.is_adult,
+                   actors.actor_list
+            FROM movie m
+            LEFT JOIN LATERAL (
+                SELECT json_agg(obj) AS actor_list
+                FROM (
+                    SELECT json_build_object('id', p.nconst, 'name', p.primary_name) AS obj
+                    FROM movie_principal mp
+                    JOIN person p ON p.id = mp.person_id
+                    WHERE mp.movie_id = m.id
+                      AND mp.category IN ('actor','actress')
+                    ORDER BY mp.ordering NULLS LAST, p.primary_name
+                    LIMIT 5
+                ) actor_rows
+            ) actors ON TRUE
+            WHERE LOWER(m.primary_title) = LOWER(:title)
+            """;
+
     private static final TypeReference<List<Map<String, Object>>> ACTOR_LIST_TYPE =
             new TypeReference<>() {};
 
@@ -186,6 +206,22 @@ public class MovieSearchService {
     public Optional<MovieContext> fetchByTconst(String tconst) {
         MapSqlParameterSource params = new MapSqlParameterSource("tconst", tconst);
         List<MovieContext> matches = jdbcTemplate.query(RESOURCE_SQL, params, (rs, rowNum) -> mapMovie(rs, true));
+        return matches.stream().findFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MovieContext> lookupByTitle(String title, Integer year) {
+        if (title == null || title.isBlank()) {
+            return Optional.empty();
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource("title", title.trim());
+        StringBuilder sql = new StringBuilder(LOOKUP_SQL);
+        if (year != null) {
+            sql.append(" AND m.start_year = :year");
+            params.addValue("year", year);
+        }
+        sql.append(" ORDER BY m.start_year DESC NULLS LAST LIMIT 1");
+        List<MovieContext> matches = jdbcTemplate.query(sql.toString(), params, (rs, rowNum) -> mapMovie(rs, true));
         return matches.stream().findFirst();
     }
 

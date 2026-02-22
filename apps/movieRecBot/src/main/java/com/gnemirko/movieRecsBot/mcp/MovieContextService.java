@@ -81,6 +81,10 @@ public class MovieContextService {
             return Optional.empty();
         }
         try {
+            Optional<MovieContextItem> exact = mcpClient.lookupExact(title, year);
+            if (exact.isPresent()) {
+                return exact;
+            }
             List<MovieContextItem> matches = mcpClient.search(
                     buildLookupQuery(title, year),
                     Collections.emptyList(),
@@ -88,14 +92,14 @@ public class MovieContextService {
                     Collections.emptyList(),
                     year,
                     5);
+            if (matches.isEmpty()) {
+                return Optional.empty();
+            }
             if (year != null) {
                 return matches.stream()
                         .filter(item -> item.year() != null && item.year().equals(year))
                         .findFirst()
                         .or(() -> matches.stream().findFirst());
-            }
-            if (matches.isEmpty()) {
-                return Optional.empty();
             }
             return Optional.ofNullable(matches.get(0));
         } catch (Exception ex) {

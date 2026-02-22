@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
 @Component
@@ -46,7 +47,7 @@ public class McpClient {
                                          List<String> actorFilters,
                                          Integer fromYear,
                                          int limit) {
-        Map<String, Object> arguments = buildArguments(query, includeGenres, excludeGenres, actorFilters, fromYear, limit);
+        Map<String, Object> arguments = buildSearchArguments(query, includeGenres, excludeGenres, actorFilters, fromYear, limit);
         int totalAttempts = MAX_TIMEOUT_RETRIES + 1;
         for (int attempt = 1; attempt <= totalAttempts; attempt++) {
             try {
@@ -63,12 +64,12 @@ public class McpClient {
         return Collections.emptyList();
     }
 
-    private Map<String, Object> buildArguments(String query,
-                                               List<String> includeGenres,
-                                               List<String> excludeGenres,
-                                               List<String> actorFilters,
-                                               Integer fromYear,
-                                               int limit) {
+    private Map<String, Object> buildSearchArguments(String query,
+                                                     List<String> includeGenres,
+                                                     List<String> excludeGenres,
+                                                     List<String> actorFilters,
+                                                     Integer fromYear,
+                                                     int limit) {
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("query", query);
         arguments.put("limit", limit);
@@ -85,6 +86,40 @@ public class McpClient {
             arguments.put("fromYear", fromYear);
         }
         return arguments;
+    }
+
+    public Optional<MovieContextItem> lookupExact(String title, Integer year) {
+        if (title == null || title.isBlank()) {
+            return Optional.empty();
+        }
+        Map<String, Object> arguments = new HashMap<>();
+        arguments.put("title", title.trim());
+        if (year != null) {
+            arguments.put("year", year);
+        }
+        McpToolRequest request = new McpToolRequest("movie.lookup", arguments);
+        try {
+            McpToolResponse response = webClient.post()
+                    .uri("/mcp/v1/tools")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(McpToolResponse.class)
+                    .timeout(timeout)
+                    .block(timeout);
+            if (response == null || response.content() == null) {
+                return Optional.empty();
+            }
+            return response.content().stream()
+                    .filter(block -> "json".equalsIgnoreCase(block.type()))
+                    .map(McpToolResponse.ContentBlock::json)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .map(node -> objectMapper.convertValue(node, MovieContextItem.class));
+        } catch (Exception ex) {
+            log.warn("MCP lookup for '{}' failed: {}", title, ex.getMessage());
+            return Optional.empty();
+        }
     }
 
     private List<MovieContextItem> executeSearch(Map<String, Object> arguments) {

@@ -94,6 +94,9 @@ public class UserProfileServiceImpl implements UserProfileService {
     }
 
     private static Set<String> normalize(Collection<String> in) {
+        if (in == null || in.isEmpty()) {
+            return Collections.emptySet();
+        }
         Set<String> out = new LinkedHashSet<>();
         for (String s : in) {
             String t = normalize(s);

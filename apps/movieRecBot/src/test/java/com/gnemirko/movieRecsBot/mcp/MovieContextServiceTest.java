@@ -7,6 +7,7 @@ import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -15,6 +16,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -218,5 +221,36 @@ class MovieContextServiceTest {
         Optional<MovieContextItem> result = service.lookupByTitle("Let Him Go", 2020);
 
         assertThat(result).contains(match);
+    }
+
+    @Test
+    void buildContextBlockSanitizesActorFilters() {
+        UserProfile profile = UserProfile.builder().telegramUserId(77L).build();
+        MovieContextItem item = new MovieContextItem(
+                "tt0000001",
+                "Sample",
+                2020,
+                7.1,
+                1200,
+                0.87,
+                List.of(),
+                List.of(),
+                Map.of()
+        );
+        when(mcpClient.search(anyString(), anyList(), anyList(), anyList(), any(), anyInt()))
+                .thenReturn(List.of(item));
+
+        service.buildContextBlock(
+                "query",
+                "",
+                profile,
+                UserLanguage.fromIsoCode("en"),
+                UserIntent.empty(),
+                List.of("  Actor One  ", "", "Actor One")
+        );
+
+        ArgumentCaptor<List<String>> filtersCaptor = ArgumentCaptor.forClass(List.class);
+        verify(mcpClient).search(eq("query"), eq(List.of()), eq(List.of()), filtersCaptor.capture(), eq(null), eq(5));
+        assertThat(filtersCaptor.getValue()).containsExactly("Actor One");
     }
 }

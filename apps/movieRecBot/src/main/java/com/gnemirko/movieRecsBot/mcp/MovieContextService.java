@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -30,36 +31,19 @@ public class MovieContextService {
         if (profile == null) {
             return ContextBlock.empty();
         }
-        String query = firstNonBlank(intent == null ? null : intent.rewrittenQuery(), userQuery);
-        if (intent != null && intent.descriptors() != null && !intent.descriptors().isEmpty()) {
-            query = query + " | Vibe: " + String.join(", ", intent.descriptors());
-        }
-        if (intent != null && intent.runtimeMinutes() != null) {
-            query = query + " | runtime <= " + intent.runtimeMinutes() + " minutes";
-        }
-        if (profileSummary != null && !profileSummary.isBlank()) {
-            query = query + " | " + profileSummary.trim();
-        }
-
-        List<String> includeGenres = new ArrayList<>();
-        if (intent != null && intent.includeGenres() != null) {
-            includeGenres.addAll(intent.includeGenres());
-        }
-        includeGenres.addAll(profile.getLikedGenres());
-
-        List<String> excludeGenres = new ArrayList<>();
-        if (intent != null && intent.excludeGenres() != null) {
-            excludeGenres.addAll(intent.excludeGenres());
-        }
-        excludeGenres.addAll(profile.getBlocked()
-                .stream()
-                .map(tag -> tag.replace("genre:", ""))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.toList()));
+        String query = buildQuery(userQuery, profileSummary, intent);
+        List<String> includeGenres = mergeIncludeGenres(profile, intent);
+        List<String> excludeGenres = mergeExcludeGenres(profile, intent);
+        List<String> sanitizedActorFilters = sanitizeList(actorFilters);
 
         Integer fromYear = intent == null ? null : intent.releaseYearFrom();
-        List<MovieContextItem> items = mcpClient.search(query.trim(), includeGenres, excludeGenres, actorFilters, fromYear, 5);
+        List<MovieContextItem> items = mcpClient.search(
+                query,
+                includeGenres,
+                excludeGenres,
+                sanitizedActorFilters,
+                fromYear,
+                5);
         if (items.isEmpty()) {
             return ContextBlock.empty();
         }
@@ -113,6 +97,79 @@ public class MovieContextService {
             return title.trim();
         }
         return (title + " " + year).trim();
+    }
+
+    private String buildQuery(String userQuery, String profileSummary, UserIntent intent) {
+        List<String> segments = new ArrayList<>();
+
+        String rewritten = intent == null ? null : intent.rewrittenQuery();
+        String base = firstNonBlank(rewritten, userQuery);
+        if (!base.isBlank()) {
+            segments.add(base);
+        }
+
+        if (intent != null && intent.descriptors() != null && !intent.descriptors().isEmpty()) {
+            segments.add("Vibe: " + String.join(", ", intent.descriptors()));
+        }
+        if (intent != null && intent.runtimeMinutes() != null) {
+            segments.add("runtime <= " + intent.runtimeMinutes() + " minutes");
+        }
+        if (profileSummary != null && !profileSummary.isBlank()) {
+            segments.add(profileSummary.trim());
+        }
+
+        return String.join(" | ", segments).trim();
+    }
+
+    private List<String> mergeIncludeGenres(UserProfile profile, UserIntent intent) {
+        LinkedHashSet<String> include = new LinkedHashSet<>();
+        if (intent != null) {
+            include.addAll(sanitizeList(intent.includeGenres()));
+        }
+        if (profile != null) {
+            include.addAll(sanitizeCollection(profile.getLikedGenres()));
+        }
+        return List.copyOf(include);
+    }
+
+    private List<String> mergeExcludeGenres(UserProfile profile, UserIntent intent) {
+        LinkedHashSet<String> exclude = new LinkedHashSet<>();
+        if (intent != null) {
+            exclude.addAll(sanitizeList(intent.excludeGenres()));
+        }
+        if (profile != null) {
+            profile.getBlocked().stream()
+                    .map(tag -> tag.replace("genre:", ""))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(exclude::add);
+        }
+        return List.copyOf(exclude);
+    }
+
+    private List<String> sanitizeList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return List.copyOf(sanitizeCollection(values));
+    }
+
+    private LinkedHashSet<String> sanitizeCollection(Iterable<String> values) {
+        LinkedHashSet<String> sanitized = new LinkedHashSet<>();
+        if (values == null) {
+            return sanitized;
+        }
+        for (String value : values) {
+            String trimmed = safeTrim(value);
+            if (!trimmed.isEmpty()) {
+                sanitized.add(trimmed);
+            }
+        }
+        return sanitized;
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private String contextHeader(UserLanguage language) {

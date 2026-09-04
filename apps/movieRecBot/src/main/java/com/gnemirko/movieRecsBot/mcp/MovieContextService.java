@@ -36,14 +36,25 @@ public class MovieContextService {
         List<String> excludeGenres = mergeExcludeGenres(profile, intent);
         List<String> sanitizedActorFilters = sanitizeList(actorFilters);
 
+        if (query.isBlank()) {
+            log.debug("Skipping MCP search: empty query after sanitization");
+            return ContextBlock.empty();
+        }
+
         Integer fromYear = intent == null ? null : intent.releaseYearFrom();
-        List<MovieContextItem> items = mcpClient.search(
-                query,
-                includeGenres,
-                excludeGenres,
-                sanitizedActorFilters,
-                fromYear,
-                5);
+        List<MovieContextItem> items;
+        try {
+            items = mcpClient.search(new McpSearchRequest(
+                    query,
+                    includeGenres,
+                    excludeGenres,
+                    sanitizedActorFilters,
+                    fromYear,
+                    5));
+        } catch (IllegalArgumentException ex) {
+            log.warn("Failed to build MCP search request: {}", ex.getMessage());
+            return ContextBlock.empty();
+        }
         if (items.isEmpty()) {
             return ContextBlock.empty();
         }
@@ -65,17 +76,17 @@ public class MovieContextService {
             return Optional.empty();
         }
         try {
-            Optional<MovieContextItem> exact = mcpClient.lookupExact(title, year);
+            Optional<MovieContextItem> exact = mcpClient.lookupExact(new McpLookupRequest(title, year));
             if (exact.isPresent()) {
                 return exact;
             }
-            List<MovieContextItem> matches = mcpClient.search(
+            List<MovieContextItem> matches = mcpClient.search(new McpSearchRequest(
                     buildLookupQuery(title, year),
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList(),
                     year,
-                    5);
+                    5));
             if (matches.isEmpty()) {
                 return Optional.empty();
             }
@@ -137,7 +148,7 @@ public class MovieContextService {
         if (intent != null) {
             exclude.addAll(sanitizeList(intent.excludeGenres()));
         }
-        if (profile != null) {
+        if (profile != null && profile.getBlocked() != null) {
             profile.getBlocked().stream()
                     .map(tag -> tag.replace("genre:", ""))
                     .map(String::trim)

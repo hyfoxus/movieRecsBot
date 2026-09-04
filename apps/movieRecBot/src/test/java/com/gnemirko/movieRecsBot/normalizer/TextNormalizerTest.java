@@ -40,6 +40,7 @@ class TextNormalizerTest {
 
         NormalizedInput input = textNormalizer.normalizeToEnglish("Фильм на вечер");
 
+        assertThat(input.originalText()).isEqualTo("Фильм на вечер");
         assertThat(input.normalizedText()).isEqualTo("Movie for night");
         assertThat(input.language().isoCode()).isEqualTo("ru");
         verify(normalizerClient).normalize("Фильм на вечер", "en");
@@ -51,6 +52,7 @@ class TextNormalizerTest {
 
         NormalizedInput input = textNormalizer.normalizeToEnglish("mixed язык");
 
+        assertThat(input.originalText()).isEqualTo("mixed язык");
         assertThat(input.normalizedText()).isEqualTo("mixed язык");
         assertThat(input.language().isoCode()).isEqualTo("en");
         verify(normalizerClient).normalize("mixed язык", "en");

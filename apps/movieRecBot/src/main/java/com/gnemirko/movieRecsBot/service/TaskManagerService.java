@@ -4,6 +4,7 @@ import com.gnemirko.movieRecsBot.entity.RecommendationTask;
 import com.gnemirko.movieRecsBot.repository.RecommendationTaskRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -85,48 +86,50 @@ public class TaskManagerService {
         }
 
         String displayId = t.getDisplayId();
-        log.info("Starting recommendation task {} ({}) for chat {}", taskId, displayId, t.getChatId());
-        t.setStatus(RUNNING);
-        t.setStartedAt(Instant.now());
-        repo.save(t);
+        try (var ignored = MDC.putCloseable("taskDisplayId", displayId == null ? "" : displayId)) {
+            log.info("Starting recommendation task {} ({}) for chat {}", taskId, displayId, t.getChatId());
+            t.setStatus(RUNNING);
+            t.setStartedAt(Instant.now());
+            repo.save(t);
 
-        try {
-            llmBulkhead.acquire();
-            String text;
             try {
-                text = recommendationService.reply(t.getChatId(), t.getPrompt());
+                llmBulkhead.acquire();
+                String text;
+                try {
+                    text = recommendationService.reply(t.getChatId(), t.getPrompt());
+                } finally {
+                    llmBulkhead.release();
+                }
+
+                String sanitizedText = prepareTelegramHtml(text);
+                t.setResultText(sanitizedText);
+                t.setStatus(DONE);
+                t.setFinishedAt(Instant.now());
+                repo.save(t);
+
+                log.info("Recommendation task {} ({}) completed successfully", taskId, displayId);
+                taskNotifier.send(SendMessage.builder()
+                        .chatId(String.valueOf(t.getChatId()))
+                        .text(sanitizedText)
+                        .parseMode("HTML")
+                        .disableWebPagePreview(true)
+                        .build());
+
+            } catch (Exception e) {
+                log.error("Task {} ({}) failed", taskId, displayId, e);
+                t.setError(e.getMessage());
+                t.setStatus(FAILED);
+                t.setFinishedAt(Instant.now());
+                repo.save(t);
+
+                log.debug("Recommendation task {} ({}) failed: {}", taskId, displayId, e.getMessage());
+                taskNotifier.send(SendMessage.builder()
+                        .chatId(String.valueOf(t.getChatId()))
+                        .text("💥 Something went wrong while preparing your recommendation. Please try again.")
+                        .build());
             } finally {
-                llmBulkhead.release();
+                cleanupTask(t);
             }
-
-            String sanitizedText = prepareTelegramHtml(text);
-            t.setResultText(sanitizedText);
-            t.setStatus(DONE);
-            t.setFinishedAt(Instant.now());
-            repo.save(t);
-
-            log.info("Recommendation task {} ({}) completed successfully", taskId, displayId);
-            taskNotifier.send(SendMessage.builder()
-                    .chatId(String.valueOf(t.getChatId()))
-                    .text(sanitizedText)
-                    .parseMode("HTML")
-                    .disableWebPagePreview(true)
-                    .build());
-
-        } catch (Exception e) {
-            log.error("Task {} ({}) failed", taskId, displayId, e);
-            t.setError(e.getMessage());
-            t.setStatus(FAILED);
-            t.setFinishedAt(Instant.now());
-            repo.save(t);
-
-            log.debug("Recommendation task {} ({}) failed: {}", taskId, displayId, e.getMessage());
-            taskNotifier.send(SendMessage.builder()
-                    .chatId(String.valueOf(t.getChatId()))
-                    .text("💥 Ошибка в рекомендации: " + e.getMessage())
-                    .build());
-        } finally {
-            cleanupTask(t);
         }
     }
 

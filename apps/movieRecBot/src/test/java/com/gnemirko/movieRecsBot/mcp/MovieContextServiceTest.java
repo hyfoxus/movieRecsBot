@@ -17,10 +17,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -69,8 +65,7 @@ class MovieContextServiceTest {
                 null
         );
 
-        when(mcpClient.search(eq("Фильм на вечер | Vibe: moody | Prefers drama"), eq(List.of("Drama")), eq(List.of("horror")), eq(List.of("Keanu Reeves")), eq(null), eq(5)))
-                .thenReturn(List.of(item));
+        when(mcpClient.search(any(McpSearchRequest.class))).thenReturn(List.of(item));
 
         MovieContextService.ContextBlock block = service.buildContextBlock(
                 "Фильм на вечер",
@@ -81,6 +76,14 @@ class MovieContextServiceTest {
                 List.of("Keanu Reeves")
         );
 
+        ArgumentCaptor<McpSearchRequest> searchCaptor = ArgumentCaptor.forClass(McpSearchRequest.class);
+        verify(mcpClient).search(searchCaptor.capture());
+        McpSearchRequest request = searchCaptor.getValue();
+        assertThat(request.query()).isEqualTo("Фильм на вечер | Vibe: moody | Prefers drama");
+        assertThat(request.includeGenres()).containsExactly("Drama");
+        assertThat(request.excludeGenres()).containsExactly("horror");
+        assertThat(request.actors()).containsExactly("Keanu Reeves");
+        assertThat(request.limit()).isEqualTo(5);
         assertThat(block.block()).contains("CATALOG FACTS").contains("Evening Story");
         assertThat(block.items()).hasSize(1);
     }
@@ -130,14 +133,7 @@ class MovieContextServiceTest {
         );
 
         List<String> actors = List.of("Leonardo DiCaprio", "Brad Pitt", "Margot Robbie", "Al Pacino", "Damian Lewis");
-        when(mcpClient.search(
-                eq("movie with those actors | Vibe: retro | Retro movie starring DiCaprio ensemble"),
-                eq(List.of()),
-                eq(List.of()),
-                eq(actors),
-                eq(2025),
-                eq(5)
-        )).thenReturn(List.of(item));
+        when(mcpClient.search(any(McpSearchRequest.class))).thenReturn(List.of(item));
 
         MovieContextService.ContextBlock block = service.buildContextBlock(
                 "movie with those actors",
@@ -148,6 +144,13 @@ class MovieContextServiceTest {
                 actors
         );
 
+        ArgumentCaptor<McpSearchRequest> captor = ArgumentCaptor.forClass(McpSearchRequest.class);
+        verify(mcpClient).search(captor.capture());
+        McpSearchRequest request = captor.getValue();
+        assertThat(request.query()).isEqualTo("movie with those actors | Vibe: retro | Retro movie starring DiCaprio ensemble");
+        assertThat(request.actors()).containsExactlyElementsOf(actors);
+        assertThat(request.fromYear()).isEqualTo(2025);
+        assertThat(request.limit()).isEqualTo(5);
         assertThat(block.items()).hasSize(1);
         assertThat(block.block()).contains("Once Upon a Time in... Hollywood");
     }
@@ -169,8 +172,16 @@ class MovieContextServiceTest {
                 null,
                 null
         );
+        when(mcpClient.search(any(McpSearchRequest.class))).thenReturn(List.of());
+
         service.buildContextBlock("anything", "", profile, UserLanguage.fromIsoCode("en"), intent, List.of());
-        verify(mcpClient).search(anyString(), anyList(), anyList(), anyList(), eq(null), eq(5));
+
+        ArgumentCaptor<McpSearchRequest> captor = ArgumentCaptor.forClass(McpSearchRequest.class);
+        verify(mcpClient).search(captor.capture());
+        assertThat(captor.getValue().includeGenres()).containsExactly("Drama");
+        assertThat(captor.getValue().excludeGenres()).isEmpty();
+        assertThat(captor.getValue().fromYear()).isNull();
+        assertThat(captor.getValue().limit()).isEqualTo(5);
     }
 
     @Test
@@ -186,18 +197,22 @@ class MovieContextServiceTest {
                 List.of(),
                 Map.of()
         );
-        when(mcpClient.lookupExact("Let Him Go", 2020)).thenReturn(Optional.of(match));
+        when(mcpClient.lookupExact(any(McpLookupRequest.class))).thenReturn(Optional.of(match));
 
         Optional<MovieContextItem> result = service.lookupByTitle("Let Him Go", 2020);
 
         assertThat(result).contains(match);
-        verify(mcpClient).lookupExact("Let Him Go", 2020);
+        ArgumentCaptor<McpLookupRequest> lookupCaptor = ArgumentCaptor.forClass(McpLookupRequest.class);
+        verify(mcpClient).lookupExact(lookupCaptor.capture());
+        McpLookupRequest lookupRequest = lookupCaptor.getValue();
+        assertThat(lookupRequest.title()).isEqualTo("Let Him Go");
+        assertThat(lookupRequest.year()).isEqualTo(2020);
         verifyNoMoreInteractions(mcpClient);
     }
 
     @Test
     void lookupByTitleFallsBackToSearchWhenExactMissing() {
-        when(mcpClient.lookupExact("Let Him Go", 2020)).thenReturn(Optional.empty());
+        when(mcpClient.lookupExact(any(McpLookupRequest.class))).thenReturn(Optional.empty());
         MovieContextItem match = new MovieContextItem(
                 "tt9620292",
                 "Let Him Go",
@@ -209,18 +224,15 @@ class MovieContextServiceTest {
                 List.of(),
                 Map.of()
         );
-        when(mcpClient.search(
-                eq("Let Him Go 2020"),
-                eq(List.of()),
-                eq(List.of()),
-                eq(List.of()),
-                eq(2020),
-                eq(5)
-        )).thenReturn(List.of(match));
+        when(mcpClient.search(any(McpSearchRequest.class))).thenReturn(List.of(match));
 
         Optional<MovieContextItem> result = service.lookupByTitle("Let Him Go", 2020);
 
         assertThat(result).contains(match);
+        ArgumentCaptor<McpSearchRequest> searchCaptor = ArgumentCaptor.forClass(McpSearchRequest.class);
+        verify(mcpClient).search(searchCaptor.capture());
+        assertThat(searchCaptor.getValue().query()).isEqualTo("Let Him Go 2020");
+        assertThat(searchCaptor.getValue().fromYear()).isEqualTo(2020);
     }
 
     @Test
@@ -237,8 +249,7 @@ class MovieContextServiceTest {
                 List.of(),
                 Map.of()
         );
-        when(mcpClient.search(anyString(), anyList(), anyList(), anyList(), any(), anyInt()))
-                .thenReturn(List.of(item));
+        when(mcpClient.search(any(McpSearchRequest.class))).thenReturn(List.of(item));
 
         service.buildContextBlock(
                 "query",
@@ -249,8 +260,11 @@ class MovieContextServiceTest {
                 List.of("  Actor One  ", "", "Actor One")
         );
 
-        ArgumentCaptor<List<String>> filtersCaptor = ArgumentCaptor.forClass(List.class);
-        verify(mcpClient).search(eq("query"), eq(List.of()), eq(List.of()), filtersCaptor.capture(), eq(null), eq(5));
-        assertThat(filtersCaptor.getValue()).containsExactly("Actor One");
+        ArgumentCaptor<McpSearchRequest> captor = ArgumentCaptor.forClass(McpSearchRequest.class);
+        verify(mcpClient).search(captor.capture());
+        assertThat(captor.getValue().query()).isEqualTo("query");
+        assertThat(captor.getValue().actors()).containsExactly("Actor One");
+        assertThat(captor.getValue().includeGenres()).isEmpty();
+        assertThat(captor.getValue().excludeGenres()).isEmpty();
     }
 }

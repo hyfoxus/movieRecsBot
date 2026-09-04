@@ -15,11 +15,11 @@ public class TextNormalizer {
     public NormalizedInput normalizeToEnglish(String text) {
         NormalizationResponse response = client.normalize(text, "en");
         if (response == null) {
-            return new NormalizedInput(text, UserLanguage.englishFallback());
+            return new NormalizedInput(text, text, UserLanguage.englishFallback());
         }
         String normalized = nvl(stripPromptDelimiters(response.normalizedText()), text);
         UserLanguage language = UserLanguage.fromIsoCode(resolveDetectedIso(response.detectedLanguage()));
-        return new NormalizedInput(normalized, language);
+        return new NormalizedInput(text, normalized, language);
     }
 
     private static String nvl(String value, String fallback) {

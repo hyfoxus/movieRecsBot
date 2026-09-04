@@ -74,7 +74,7 @@ class RecommendationServiceTest {
     void replyEscalatesFromClarifierToRecommendation() {
         long chatId = 77L;
         UserLanguage language = UserLanguage.fromIsoCode("ru");
-        NormalizedInput normalizedInput = new NormalizedInput("movie for the evening", language);
+        NormalizedInput normalizedInput = new NormalizedInput("Фильм на вечер", "movie for the evening", language);
         when(textNormalizer.normalizeToEnglish("Фильм на вечер")).thenReturn(normalizedInput);
 
         PromptContext context = new PromptContext(new UserProfile(), language, "summary", "history", "context", List.of(), UserIntent.empty());
@@ -100,7 +100,7 @@ class RecommendationServiceTest {
         verify(recommendationResponseParser).parse(anyString(), any(), anyString(), any());
         verify(recommendationRenderer).render(parsedResponse);
         verify(dialogPolicy, times(2)).reset(chatId);
-        verify(userContextService).append(chatId, "User: movie for the evening");
+        verify(userContextService).append(chatId, "User: Фильм на вечер (en: movie for the evening)");
         verify(userContextService).append(chatId, "Bot: List");
         verifyNoMoreInteractions(userContextService);
     }
@@ -109,7 +109,7 @@ class RecommendationServiceTest {
     void replySkipsClarifierWhenActorConstraintsDetected() {
         long chatId = 88L;
         UserLanguage language = UserLanguage.fromIsoCode("ru");
-        NormalizedInput normalizedInput = new NormalizedInput("movie with al pacino", language);
+        NormalizedInput normalizedInput = new NormalizedInput("Фильм с Аль Пачино", "movie with al pacino", language);
         when(textNormalizer.normalizeToEnglish("Фильм с Аль Пачино")).thenReturn(normalizedInput);
 
         UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino", IntentType.RECOMMENDATION, "", null, null);
@@ -132,13 +132,16 @@ class RecommendationServiceTest {
         verify(recommendationModelClient, times(1)).call(anyString(), eq("userPrompt"));
         verify(dialogPolicy, never()).recommendNow(chatId, "movie with al pacino");
         verify(dialogPolicy).reset(chatId);
+        verify(userContextService).append(chatId, "User: Фильм с Аль Пачино (en: movie with al pacino)");
+        verify(userContextService).append(chatId, "Bot: List");
+        verifyNoMoreInteractions(userContextService);
     }
 
     @Test
     void replyHandlesInformationIntent() {
         long chatId = 55L;
         UserLanguage language = UserLanguage.fromIsoCode("en");
-        NormalizedInput normalizedInput = new NormalizedInput("tell me about Heat", language);
+        NormalizedInput normalizedInput = new NormalizedInput("Tell me about Heat", "tell me about Heat", language);
         when(textNormalizer.normalizeToEnglish("Tell me about Heat")).thenReturn(normalizedInput);
 
         UserIntent infoIntent = new UserIntent(
@@ -163,7 +166,10 @@ class RecommendationServiceTest {
         assertThat(reply).isEqualTo("<b>Heat</b> (1995)");
         verify(movieInfoService).describeMovie("Heat", 1995);
         verifyNoMoreInteractions(promptBuilder, recommendationModelClient, recommendationResponseParser, recommendationRenderer);
+        verify(userContextService).append(chatId, "User: Tell me about Heat");
+        verify(userContextService).append(chatId, "Bot: Heat (1995)");
         verify(dialogPolicy).reset(chatId);
+        verifyNoMoreInteractions(userContextService);
     }
 
     private RecommendationResponseParser.ParsedResponse sampleParsedResponse() {

@@ -12,10 +12,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
@@ -41,21 +39,20 @@ public class McpClient {
         this.timeout = Duration.ofMillis(Math.max(timeoutMs, 1000));
     }
 
-    public List<MovieContextItem> search(String query,
-                                         List<String> includeGenres,
-                                         List<String> excludeGenres,
-                                         List<String> actorFilters,
-                                         Integer fromYear,
-                                         int limit) {
-        Map<String, Object> arguments = buildSearchArguments(query, includeGenres, excludeGenres, actorFilters, fromYear, limit);
+    public List<MovieContextItem> search(McpSearchRequest request) {
+        if (request == null) {
+            return List.of();
+        }
         int totalAttempts = MAX_TIMEOUT_RETRIES + 1;
         for (int attempt = 1; attempt <= totalAttempts; attempt++) {
             try {
-                return executeSearch(arguments);
+                return executeSearch(request);
             } catch (Exception ex) {
                 boolean timeoutFailure = isTimeoutException(ex);
-                log.warn("MCP search attempt {}/{} {}: {}", attempt, totalAttempts,
-                        timeoutFailure ? "timed out" : "failed", ex.getMessage());
+                log.warn("MCP search attempt {}/{} for '{}' {}: {}", attempt, totalAttempts,
+                        request.query(),
+                        timeoutFailure ? "timed out" : "failed",
+                        ex.getMessage());
                 if (!timeoutFailure || attempt == totalAttempts) {
                     break;
                 }
@@ -64,45 +61,16 @@ public class McpClient {
         return Collections.emptyList();
     }
 
-    private Map<String, Object> buildSearchArguments(String query,
-                                                     List<String> includeGenres,
-                                                     List<String> excludeGenres,
-                                                     List<String> actorFilters,
-                                                     Integer fromYear,
-                                                     int limit) {
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("query", query);
-        arguments.put("limit", limit);
-        if (includeGenres != null && !includeGenres.isEmpty()) {
-            arguments.put("includeGenres", includeGenres);
-        }
-        if (excludeGenres != null && !excludeGenres.isEmpty()) {
-            arguments.put("excludeGenres", excludeGenres);
-        }
-        if (actorFilters != null && !actorFilters.isEmpty()) {
-            arguments.put("actors", actorFilters);
-        }
-        if (fromYear != null && fromYear > 0) {
-            arguments.put("fromYear", fromYear);
-        }
-        return arguments;
-    }
-
-    public Optional<MovieContextItem> lookupExact(String title, Integer year) {
-        if (title == null || title.isBlank()) {
+    public Optional<MovieContextItem> lookupExact(McpLookupRequest request) {
+        if (request == null) {
             return Optional.empty();
         }
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("title", title.trim());
-        if (year != null) {
-            arguments.put("year", year);
-        }
-        McpToolRequest request = new McpToolRequest("movie.lookup", arguments);
+        McpToolRequest toolRequest = new McpToolRequest("movie.lookup", request.toArguments());
         try {
             McpToolResponse response = webClient.post()
                     .uri("/mcp/v1/tools")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(request)
+                    .bodyValue(toolRequest)
                     .retrieve()
                     .bodyToMono(McpToolResponse.class)
                     .timeout(timeout)
@@ -117,17 +85,17 @@ public class McpClient {
                     .findFirst()
                     .map(node -> objectMapper.convertValue(node, MovieContextItem.class));
         } catch (Exception ex) {
-            log.warn("MCP lookup for '{}' failed: {}", title, ex.getMessage());
+            log.warn("MCP lookup for '{}' failed: {}", request.title(), ex.getMessage());
             return Optional.empty();
         }
     }
 
-    private List<MovieContextItem> executeSearch(Map<String, Object> arguments) {
-        McpToolRequest request = new McpToolRequest("movie.search", arguments);
+    private List<MovieContextItem> executeSearch(McpSearchRequest request) {
+        McpToolRequest body = new McpToolRequest("movie.search", request.toArguments());
         McpToolResponse response = webClient.post()
                 .uri("/mcp/v1/tools")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
+                .bodyValue(body)
                 .retrieve()
                 .bodyToMono(McpToolResponse.class)
                 .timeout(timeout)

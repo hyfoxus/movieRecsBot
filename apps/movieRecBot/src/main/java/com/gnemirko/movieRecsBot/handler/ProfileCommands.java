@@ -1,7 +1,7 @@
 package com.gnemirko.movieRecsBot.handler;
 
-
 import java.util.Arrays;
+import java.util.Locale;
 
 public enum ProfileCommands {
     PROFILE("/profile"),
@@ -22,7 +22,7 @@ public enum ProfileCommands {
 
     public static ProfileCommands match(String text) {
         if (text == null) return null;
-        String t = text.trim().toLowerCase();
+        String t = text.trim().toLowerCase(Locale.ROOT);
         return Arrays.stream(values())
                 .filter(c -> t.startsWith(c.cmd))
                 .findFirst().orElse(null);

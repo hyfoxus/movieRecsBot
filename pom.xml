@@ -28,7 +28,7 @@
 
     <properties>
         <java.version>24</java.version>
-        <spring.ai.version>1.0.1</spring.ai.version>
+        <spring.ai.version>1.1.8</spring.ai.version>
         <testcontainers.version>1.20.1</testcontainers.version>
         <flyway.version>11.9.2</flyway.version>
         <pgvector.version>0.1.6</pgvector.version>

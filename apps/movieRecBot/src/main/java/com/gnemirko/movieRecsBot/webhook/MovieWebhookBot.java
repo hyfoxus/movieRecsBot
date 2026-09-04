@@ -5,15 +5,16 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.DefaultAbsSender;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
 
+import java.util.Objects;
 
 @Component
 public class MovieWebhookBot extends DefaultAbsSender {
 
-    @Value("${telegram.bot.token}")
-    private String token;
+    private final String token;
 
-    public MovieWebhookBot() {
+    public MovieWebhookBot(@Value("${telegram.bot.token:}") String token) {
         super(new DefaultBotOptions());
+        this.token = Objects.requireNonNullElse(token, "");
     }
 
     @Override

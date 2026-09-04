@@ -63,4 +63,27 @@ class RecommendationResponseParserTest {
         assertThat(parsed.movies()).isEmpty();
         assertThat(parsed.intro()).isEmpty();
     }
+
+    @Test
+    void parseHandlesNullProfile() {
+        String payload = """
+                {
+                  "intro":"Ready?",
+                  "language":"en",
+                  "movies":[
+                    {"title":"Sample","reason":"Because it fits","year":2020,"genres":["drama"]}
+                  ],
+                  "reminder":"Share feedback"
+                }
+                """;
+
+        RecommendationResponseParser.ParsedResponse parsed = parser.parse(
+                payload,
+                null,
+                "Movie please",
+                UserLanguage.fromIsoCode("en")
+        );
+
+        assertThat(parsed.movies()).hasSize(1);
+    }
 }

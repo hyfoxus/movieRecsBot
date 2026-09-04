@@ -11,6 +11,8 @@ import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
+import java.util.Locale;
+
 @Component
 @RequiredArgsConstructor
 public class UpdateRouter {
@@ -43,7 +45,7 @@ public class UpdateRouter {
             }
 
             if (text.startsWith("/")) {
-                String command = text.split("\\s+", 2)[0].toLowerCase();
+                String command = text.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
                 CommandContext context = new CommandContext(chatId, command, text, update);
                 return commandDispatcher.dispatch(context);
             }

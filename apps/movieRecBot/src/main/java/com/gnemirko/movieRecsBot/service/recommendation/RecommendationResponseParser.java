@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -85,9 +86,13 @@ public class RecommendationResponseParser {
         if (movies == null) {
             return List.of();
         }
-        boolean askedFantasy = userText.toLowerCase(Locale.ROOT).contains("фэнтез");
-        Set<String> mustGenres = profile.getLikedGenres();
-        Set<String> anti = profile.getBlocked();
+        boolean askedFantasy = userText != null && userText.toLowerCase(Locale.ROOT).contains("фэнтез");
+        Set<String> mustGenres = profile != null && profile.getLikedGenres() != null
+                ? profile.getLikedGenres()
+                : Collections.emptySet();
+        Set<String> anti = profile != null && profile.getBlocked() != null
+                ? profile.getBlocked()
+                : Collections.emptySet();
         List<RecommendationMovie> out = new ArrayList<>();
         for (RecommendationMovie movie : movies) {
             if (movie == null || isBlank(movie.getTitle())) continue;

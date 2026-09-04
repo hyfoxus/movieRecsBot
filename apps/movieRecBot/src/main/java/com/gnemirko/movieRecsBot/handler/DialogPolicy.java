@@ -1,5 +1,6 @@
 package com.gnemirko.movieRecsBot.handler;
 
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,7 +21,7 @@ public class DialogPolicy {
     }
 
     public boolean recommendNow(long chatId, String userText) {
-        String t = userText.toLowerCase();
+        String t = userText.toLowerCase(Locale.ROOT);
         if (RECOMMEND_NOW_PHRASES.stream().anyMatch(t::contains)) return true;
         return clarifyingTurns.getOrDefault(chatId, 0) >= MAX_CLARIFY_TURNS;
     }

@@ -2,6 +2,7 @@ package com.gnemirko.movieRecsBot.service;
 
 import com.gnemirko.movieRecsBot.entity.RecommendationTask;
 import com.gnemirko.movieRecsBot.repository.RecommendationTaskRepository;
+import com.gnemirko.movieRecsBot.service.recommendation.RecommendationMovie;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -10,8 +11,11 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -94,14 +98,14 @@ public class TaskManagerService {
 
             try {
                 llmBulkhead.acquire();
-                String text;
+                RecommendationService.RecommendationOutcome outcome;
                 try {
-                    text = recommendationService.reply(t.getChatId(), t.getPrompt());
+                    outcome = recommendationService.replyDetailed(t.getChatId(), t.getPrompt());
                 } finally {
                     llmBulkhead.release();
                 }
 
-                String sanitizedText = prepareTelegramHtml(text);
+                String sanitizedText = prepareTelegramHtml(outcome.text());
                 t.setResultText(sanitizedText);
                 t.setStatus(DONE);
                 t.setFinishedAt(Instant.now());
@@ -113,6 +117,7 @@ public class TaskManagerService {
                         .text(sanitizedText)
                         .parseMode("HTML")
                         .disableWebPagePreview(true)
+                        .replyMarkup(buildFeedbackKeyboard(outcome.movies()))
                         .build());
 
             } catch (Exception e) {
@@ -131,6 +136,21 @@ public class TaskManagerService {
                 cleanupTask(t);
             }
         }
+    }
+
+    private InlineKeyboardMarkup buildFeedbackKeyboard(List<RecommendationMovie> movies) {
+        if (movies == null || movies.isEmpty()) {
+            return null;
+        }
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        int limit = Math.min(movies.size(), 5);
+        for (int i = 0; i < limit; i++) {
+            InlineKeyboardButton up = InlineKeyboardButton.builder().text("👍").callbackData("rate:" + i + ":up").build();
+            InlineKeyboardButton down = InlineKeyboardButton.builder().text("👎").callbackData("rate:" + i + ":down").build();
+            rows.add(List.of(up, down));
+        }
+        rows.add(List.of(InlineKeyboardButton.builder().text("🔁 Ещё похожие").callbackData("more:go").build()));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
     private void cleanupTask(RecommendationTask task) {

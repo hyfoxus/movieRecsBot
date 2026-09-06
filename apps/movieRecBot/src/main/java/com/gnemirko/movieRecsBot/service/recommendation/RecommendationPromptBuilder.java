@@ -4,6 +4,8 @@ import com.gnemirko.movieRecsBot.service.UserLanguage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class RecommendationPromptBuilder {
@@ -16,6 +18,13 @@ public class RecommendationPromptBuilder {
 
     public String buildRecommendationSystemPrompt(UserLanguage language, String userText) {
         return baseSystem(language, userText) + "\n\n" + jsonResponsePrompt(language);
+    }
+
+    public String appendExclusions(String userPrompt, List<String> excludedTitles) {
+        if (excludedTitles == null || excludedTitles.isEmpty()) {
+            return userPrompt;
+        }
+        return userPrompt + "\n\nAlready shown recently — do not repeat these titles: " + String.join(", ", excludedTitles);
     }
 
     public String buildUserPrompt(PromptContext context, String userText) {

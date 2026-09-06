@@ -7,7 +7,8 @@ public record MovieMcpProperties(
         String name,
         String version,
         String description,
-        int maxResults
+        int maxResults,
+        int cacheTtlSeconds
 ) {
 
     public MovieMcpProperties {
@@ -18,5 +19,6 @@ public record MovieMcpProperties(
         version = (version == null || version.isBlank()) ? defaultVersion : version;
         description = (description == null || description.isBlank()) ? defaultDescription : description;
         maxResults = maxResults <= 0 ? 15 : maxResults;
+        cacheTtlSeconds = cacheTtlSeconds <= 0 ? 300 : cacheTtlSeconds;
     }
 }

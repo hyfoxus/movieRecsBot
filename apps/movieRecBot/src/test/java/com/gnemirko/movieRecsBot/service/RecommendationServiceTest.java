@@ -12,6 +12,7 @@ import com.gnemirko.movieRecsBot.service.recommendation.RecommendationModelClien
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationPromptBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationRenderer;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationResponseParser;
+import com.gnemirko.movieRecsBot.service.recommendation.RecommendationSessionStore;
 import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -52,6 +54,8 @@ class RecommendationServiceTest {
     private UserContextService userContextService;
     @Mock
     private MovieInfoService movieInfoService;
+    @Mock
+    private RecommendationSessionStore recommendationSessionStore;
 
     private RecommendationService service;
 
@@ -66,8 +70,10 @@ class RecommendationServiceTest {
                 textNormalizer,
                 dialogPolicy,
                 userContextService,
-                movieInfoService
+                movieInfoService,
+                recommendationSessionStore
         );
+        lenient().when(promptBuilder.appendExclusions(anyString(), any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
@@ -78,7 +84,7 @@ class RecommendationServiceTest {
         when(textNormalizer.normalizeToEnglish("Фильм на вечер")).thenReturn(normalizedInput);
 
         PromptContext context = new PromptContext(new UserProfile(), language, "summary", "history", "context", List.of(), UserIntent.empty());
-        when(promptContextBuilder.build(chatId, "movie for the evening", language)).thenReturn(context);
+        when(promptContextBuilder.buildFromPrefetch(any(), eq("movie for the evening"), eq(language))).thenReturn(context);
 
         when(promptBuilder.buildUserPrompt(context, "movie for the evening")).thenReturn("userPrompt");
         when(dialogPolicy.recommendNow(chatId, "movie for the evening")).thenReturn(false);
@@ -89,7 +95,7 @@ class RecommendationServiceTest {
         when(recommendationModelClient.call("recommendationSystem", "userPrompt")).thenReturn("{\"movies\":[],\"reminder\":\"Share\"}");
 
         RecommendationResponseParser.ParsedResponse parsedResponse = sampleParsedResponse();
-        when(recommendationResponseParser.parse(anyString(), any(), anyString(), any())).thenReturn(parsedResponse);
+        when(recommendationResponseParser.parse(anyString(), any(), anyString(), any(), any())).thenReturn(parsedResponse);
         when(recommendationRenderer.render(parsedResponse)).thenReturn("<b>List</b>");
 
         String reply = service.reply(chatId, "Фильм на вечер");
@@ -97,11 +103,12 @@ class RecommendationServiceTest {
         assertThat(reply).isEqualTo("<b>List</b>\n\n<i>Share</i>");
 
         verify(recommendationModelClient, times(2)).call(anyString(), eq("userPrompt"));
-        verify(recommendationResponseParser).parse(anyString(), any(), anyString(), any());
+        verify(recommendationResponseParser).parse(anyString(), any(), anyString(), any(), any());
         verify(recommendationRenderer).render(parsedResponse);
         verify(dialogPolicy, times(2)).reset(chatId);
         verify(userContextService).append(chatId, "User: Фильм на вечер (en: movie for the evening)");
         verify(userContextService).append(chatId, "Bot: List");
+        verify(userContextService).compactIfNeeded(chatId);
         verifyNoMoreInteractions(userContextService);
     }
 
@@ -114,7 +121,7 @@ class RecommendationServiceTest {
 
         UserIntent intent = new UserIntent(List.of("Al Pacino"), List.of(), List.of(), List.of(), null, "", "Movie with Al Pacino", IntentType.RECOMMENDATION, "", null, null);
         PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), intent);
-        when(promptContextBuilder.build(chatId, "movie with al pacino", language)).thenReturn(context);
+        when(promptContextBuilder.buildFromPrefetch(any(), eq("movie with al pacino"), eq(language))).thenReturn(context);
 
         when(promptBuilder.buildUserPrompt(context, "movie with al pacino")).thenReturn("userPrompt");
         when(promptBuilder.buildRecommendationSystemPrompt(language, "movie with al pacino")).thenReturn("recommendationSystem");
@@ -122,7 +129,7 @@ class RecommendationServiceTest {
                 .thenReturn("{\"movies\":[],\"reminder\":\"Share\"}");
 
         RecommendationResponseParser.ParsedResponse parsedResponse = sampleParsedResponse();
-        when(recommendationResponseParser.parse(anyString(), any(), anyString(), any())).thenReturn(parsedResponse);
+        when(recommendationResponseParser.parse(anyString(), any(), anyString(), any(), any())).thenReturn(parsedResponse);
         when(recommendationRenderer.render(parsedResponse)).thenReturn("<b>List</b>");
 
         String reply = service.reply(chatId, "Фильм с Аль Пачино");
@@ -134,6 +141,7 @@ class RecommendationServiceTest {
         verify(dialogPolicy).reset(chatId);
         verify(userContextService).append(chatId, "User: Фильм с Аль Пачино (en: movie with al pacino)");
         verify(userContextService).append(chatId, "Bot: List");
+        verify(userContextService).compactIfNeeded(chatId);
         verifyNoMoreInteractions(userContextService);
     }
 
@@ -158,7 +166,7 @@ class RecommendationServiceTest {
                 null
         );
         PromptContext context = new PromptContext(new UserProfile(), language, "", "", "", List.of(), infoIntent);
-        when(promptContextBuilder.build(chatId, "tell me about Heat", language)).thenReturn(context);
+        when(promptContextBuilder.buildFromPrefetch(any(), eq("tell me about Heat"), eq(language))).thenReturn(context);
         when(movieInfoService.describeMovie("Heat", 1995)).thenReturn("<b>Heat</b> (1995)");
 
         String reply = service.reply(chatId, "Tell me about Heat");
@@ -168,6 +176,7 @@ class RecommendationServiceTest {
         verifyNoMoreInteractions(promptBuilder, recommendationModelClient, recommendationResponseParser, recommendationRenderer);
         verify(userContextService).append(chatId, "User: Tell me about Heat");
         verify(userContextService).append(chatId, "Bot: Heat (1995)");
+        verify(userContextService).compactIfNeeded(chatId);
         verify(dialogPolicy).reset(chatId);
         verifyNoMoreInteractions(userContextService);
     }

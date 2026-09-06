@@ -6,6 +6,8 @@ import com.gnemirko.movieRecsBot.service.UserLanguage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RecommendationResponseParserTest {
@@ -85,5 +87,31 @@ class RecommendationResponseParserTest {
         );
 
         assertThat(parsed.movies()).hasSize(1);
+    }
+
+    @Test
+    void parseDropsMoviesMatchingExcludedTitleKeys() {
+        String payload = """
+                {
+                  "intro":"Ready?",
+                  "language":"en",
+                  "movies":[
+                    {"title":"Sample","reason":"Because it fits","year":2020,"genres":["drama"]},
+                    {"title":"Other One","reason":"Also fits","year":2021,"genres":["drama"]}
+                  ],
+                  "reminder":"Share feedback"
+                }
+                """;
+
+        RecommendationResponseParser.ParsedResponse parsed = parser.parse(
+                payload,
+                null,
+                "Movie please",
+                UserLanguage.fromIsoCode("en"),
+                Set.of("sample|2020")
+        );
+
+        assertThat(parsed.movies()).hasSize(1);
+        assertThat(parsed.movies().get(0).getTitle()).isEqualTo("Other One");
     }
 }

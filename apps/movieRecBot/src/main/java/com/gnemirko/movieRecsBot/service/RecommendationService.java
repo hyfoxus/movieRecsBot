@@ -6,9 +6,11 @@ import com.gnemirko.movieRecsBot.normalizer.TextNormalizer;
 import com.gnemirko.movieRecsBot.service.recommendation.PromptContext;
 import com.gnemirko.movieRecsBot.service.recommendation.PromptContextBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationModelClient;
+import com.gnemirko.movieRecsBot.service.recommendation.RecommendationMovie;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationPromptBuilder;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationRenderer;
 import com.gnemirko.movieRecsBot.service.recommendation.RecommendationResponseParser;
+import com.gnemirko.movieRecsBot.service.recommendation.RecommendationSessionStore;
 import com.gnemirko.movieRecsBot.service.recommendation.UserIntent;
 import com.gnemirko.movieRecsBot.service.UserLanguage;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +18,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.escapeHtml;
 import static com.gnemirko.movieRecsBot.service.TelegramMessageFormatter.htmlToPlain;
@@ -41,9 +46,21 @@ public class RecommendationService {
     private final DialogPolicy dialogPolicy;
     private final UserContextService userContextService;
     private final MovieInfoService movieInfoService;
+    private final RecommendationSessionStore recommendationSessionStore;
+
+    public record RecommendationOutcome(String text, List<RecommendationMovie> movies) {
+    }
 
     public String reply(long chatId, String userText) {
+        return replyDetailed(chatId, userText).text();
+    }
+
+    public RecommendationOutcome replyDetailed(long chatId, String userText) {
+        CompletableFuture<PromptContextBuilder.Prefetch> prefetchFuture =
+                CompletableFuture.supplyAsync(() -> promptContextBuilder.prefetch(chatId));
         NormalizedInput normalized = textNormalizer.normalizeToEnglish(userText);
+        PromptContextBuilder.Prefetch prefetch = prefetchFuture.join();
+
         String correlationId = UUID.randomUUID().toString();
         String normalizedUserText = normalized.normalizedText();
         String originalUserText = normalized.originalText();
@@ -52,7 +69,7 @@ public class RecommendationService {
         try (var ignored = MDC.putCloseable("correlationId", correlationId)) {
             log.info("recommendation.request.start chatId={} language={} original='{}'", chatId, language.isoCode(), truncate(originalUserText));
 
-            PromptContext context = promptContextBuilder.build(chatId, normalizedUserText, language);
+            PromptContext context = promptContextBuilder.buildFromPrefetch(prefetch, normalizedUserText, language);
             Reply reply;
             if (shouldHandleInformationIntent(context)) {
                 reply = replyWithMovieInfo(chatId, context.userIntent());
@@ -63,8 +80,8 @@ public class RecommendationService {
                 String userPrompt = promptBuilder.buildUserPrompt(context, normalizedUserText);
                 boolean skipClarifier = shouldSkipClarifier(context);
                 reply = (skipClarifier || dialogPolicy.recommendNow(chatId, normalizedUserText))
-                        ? generateRecommendation(chatId, context, normalizedUserText, userPrompt)
-                        : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt);
+                        ? generateRecommendation(chatId, context, normalizedUserText, userPrompt, originalUserText)
+                        : handleClarifyingStage(chatId, context, normalizedUserText, userPrompt, originalUserText);
                 log.debug("recommendation.intent.recommend correlationId={} skipClarifier={} catalogItems={}",
                         correlationId, skipClarifier, context.catalogItems().size());
             }
@@ -74,48 +91,66 @@ public class RecommendationService {
                     : "User: " + originalUserText + " (en: " + normalizedUserText + ")";
             userContextService.append(chatId, userHistoryEntry);
             userContextService.append(chatId, "Bot: " + htmlToPlain(reply.text()));
+            userContextService.compactIfNeeded(chatId);
 
             String response = appendOpinionReminder(reply.text(), reply.reminder());
             log.info("recommendation.request.complete chatId={} correlationId={} movies={} reminderPresent={}",
                     chatId,
                     correlationId,
-                    reply.movieCount(),
+                    reply.movies().size(),
                     reply.reminder() != null && !reply.reminder().isBlank());
-            return response;
+            return new RecommendationOutcome(response, reply.movies());
         }
     }
 
     private Reply handleClarifyingStage(long chatId,
                                         PromptContext context,
                                         String normalizedUserText,
-                                        String userPrompt) {
+                                        String userPrompt,
+                                        String originalUserText) {
         String systemPrompt = promptBuilder.buildQuestionSystemPrompt(context.language(), normalizedUserText);
         String response = recommendationModelClient.call(systemPrompt, userPrompt);
         String stripped = stripCodeFence(response).trim();
         boolean looksLikeRecommendation = RecommendationMessageClassifier.looksLikeRecommendation(stripped);
         if ("__RECOMMEND__".equalsIgnoreCase(stripped) || looksLikeRecommendation) {
             dialogPolicy.reset(chatId);
-            return generateRecommendation(chatId, context, normalizedUserText, userPrompt);
+            return generateRecommendation(chatId, context, normalizedUserText, userPrompt, originalUserText);
         }
         dialogPolicy.countClarifying(chatId);
-        return new Reply(sanitize(stripped), "", 0);
+        return new Reply(sanitize(stripped), "", List.of());
     }
 
     private Reply generateRecommendation(long chatId,
                                          PromptContext context,
                                          String normalizedUserText,
-                                         String userPrompt) {
+                                         String userPrompt,
+                                         String originalUserText) {
         UserLanguage language = context.language();
+        Set<String> excludedKeys = recommendationSessionStore.excludedTitleKeys(chatId);
+        List<String> excludedTitles = recommendationSessionStore.get(chatId)
+                .map(session -> session.lastMovies().stream().map(this::describeForExclusion).toList())
+                .orElse(List.of());
+        String finalUserPrompt = promptBuilder.appendExclusions(userPrompt, excludedTitles);
+
         String systemPrompt = promptBuilder.buildRecommendationSystemPrompt(language, normalizedUserText);
-        String raw = recommendationModelClient.call(systemPrompt, userPrompt);
+        String raw = recommendationModelClient.call(systemPrompt, finalUserPrompt);
         RecommendationResponseParser.ParsedResponse parsed = responseParser.parse(
                 raw,
                 context.profile(),
                 normalizedUserText,
-                language);
+                language,
+                excludedKeys);
         String rendered = unescapeBasicHtml(formatRecommendation(raw, parsed));
         dialogPolicy.reset(chatId);
-        return new Reply(rendered, parsed.reminder(), parsed.movies().size());
+        recommendationSessionStore.record(chatId, originalUserText, parsed.movies());
+        return new Reply(rendered, parsed.reminder(), parsed.movies());
+    }
+
+    private String describeForExclusion(RecommendationMovie movie) {
+        if (movie == null || movie.getTitle() == null) {
+            return "";
+        }
+        return movie.getYear() == null ? movie.getTitle() : movie.getTitle() + " (" + movie.getYear() + ")";
     }
 
     private String formatRecommendation(String raw,
@@ -150,7 +185,7 @@ public class RecommendationService {
         return trimmed.length() <= max ? trimmed : trimmed.substring(0, max) + "…";
     }
 
-    private record Reply(String text, String reminder, int movieCount) {
+    private record Reply(String text, String reminder, List<RecommendationMovie> movies) {
     }
 
     private Reply replyWithMovieInfo(long chatId, UserIntent intent) {
@@ -158,7 +193,7 @@ public class RecommendationService {
                 intent == null ? null : intent.requestedTitle(),
                 intent == null ? null : intent.requestedYear());
         dialogPolicy.reset(chatId);
-        return new Reply(text, "", 0);
+        return new Reply(text, "", List.of());
     }
 
     private boolean shouldHandleInformationIntent(PromptContext context) {

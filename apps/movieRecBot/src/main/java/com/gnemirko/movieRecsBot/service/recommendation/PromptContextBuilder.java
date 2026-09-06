@@ -24,10 +24,27 @@ public class PromptContextBuilder {
     private final MovieContextService movieContextService;
     private final UserIntentParser userIntentParser;
 
-    public PromptContext build(long chatId, String normalizedUserText, UserLanguage language) {
+    public record Prefetch(UserProfile profile, String profileSummary, String history) {
+    }
+
+    /**
+     * DB-only reads (profile + history) that don't depend on the normalized user text — split out so
+     * callers can run this concurrently with the (network-bound) text normalization step.
+     */
+    public Prefetch prefetch(long chatId) {
         UserProfile profile = userProfileService.getOrCreate(chatId);
         String profileSummary = buildProfileSummary(profile);
         String history = userContextService.historyAsOneString(chatId, 30, 300);
+        return new Prefetch(profile, profileSummary, history);
+    }
+
+    public PromptContext build(long chatId, String normalizedUserText, UserLanguage language) {
+        return buildFromPrefetch(prefetch(chatId), normalizedUserText, language);
+    }
+
+    public PromptContext buildFromPrefetch(Prefetch prefetch, String normalizedUserText, UserLanguage language) {
+        UserProfile profile = prefetch.profile();
+        String profileSummary = prefetch.profileSummary();
         UserIntent intent = userIntentParser.parse(normalizedUserText, profileSummary, language);
         List<String> actorFilters = resolveActorFilters(normalizedUserText, profile, intent);
         ContextBlock block = movieContextService.buildContextBlock(
@@ -41,7 +58,7 @@ public class PromptContextBuilder {
                 profile,
                 language,
                 profileSummary,
-                history,
+                prefetch.history(),
                 block.block(),
                 block.items(),
                 intent

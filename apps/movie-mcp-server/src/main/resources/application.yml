@@ -29,3 +29,4 @@ app:
     version: ${APP_MCP_VERSION:1.0.0}
     description: ${APP_MCP_DESCRIPTION:Provides pgvector-backed movie search and metadata.}
     max-results: ${APP_MCP_MAX_RESULTS:15}
+    cache-ttl-seconds: ${APP_MCP_CACHE_TTL_SECONDS:300}

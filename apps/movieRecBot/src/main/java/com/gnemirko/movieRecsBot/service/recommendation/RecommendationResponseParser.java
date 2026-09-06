@@ -27,6 +27,14 @@ public class RecommendationResponseParser {
                                 UserProfile profile,
                                 String userText,
                                 UserLanguage expectedLanguage) {
+        return parse(rawJson, profile, userText, expectedLanguage, Set.of());
+    }
+
+    public ParsedResponse parse(String rawJson,
+                                UserProfile profile,
+                                String userText,
+                                UserLanguage expectedLanguage,
+                                Set<String> excludedTitleKeys) {
         String json = normalizeJsonPayload(rawJson);
         ParsedResponse result = new ParsedResponse();
         try {
@@ -56,7 +64,7 @@ public class RecommendationResponseParser {
                         parsedMovies.add(movie);
                     }
                 }
-                List<RecommendationMovie> filtered = postFilter(parsedMovies, profile, userText);
+                List<RecommendationMovie> filtered = postFilter(parsedMovies, profile, userText, excludedTitleKeys);
                 result.movies = filtered;
             }
             result.reminder = text(root.get("reminder"));
@@ -82,10 +90,12 @@ public class RecommendationResponseParser {
 
     private List<RecommendationMovie> postFilter(List<RecommendationMovie> movies,
                                                  UserProfile profile,
-                                                 String userText) {
+                                                 String userText,
+                                                 Set<String> excludedTitleKeys) {
         if (movies == null) {
             return List.of();
         }
+        Set<String> excluded = excludedTitleKeys == null ? Set.of() : excludedTitleKeys;
         boolean askedFantasy = userText != null && userText.toLowerCase(Locale.ROOT).contains("фэнтез");
         Set<String> mustGenres = profile != null && profile.getLikedGenres() != null
                 ? profile.getLikedGenres()
@@ -96,6 +106,7 @@ public class RecommendationResponseParser {
         List<RecommendationMovie> out = new ArrayList<>();
         for (RecommendationMovie movie : movies) {
             if (movie == null || isBlank(movie.getTitle())) continue;
+            if (!excluded.isEmpty() && excluded.contains(RecommendationSessionStore.key(movie))) continue;
             Set<String> genres = movie.getGenres();
             if (askedFantasy && (genres == null || genres.stream().noneMatch(g -> eq(g, "fantasy")))) continue;
             if (!mustGenres.isEmpty() && (genres == null || genres.stream().noneMatch(g -> containsIgnoreCase(mustGenres, g))))

@@ -1,6 +1,7 @@
 package com.gnemirko.movieRecsBot.handler.command;
 
 import com.gnemirko.movieRecsBot.handler.MiniMenu;
+import com.gnemirko.movieRecsBot.service.ChatActionNotifier;
 import com.gnemirko.movieRecsBot.service.TaskManagerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ class RecommendCommandHandler implements BotCommandHandler {
 
     private final TaskManagerService taskManagerService;
     private final MiniMenu miniMenu;
+    private final ChatActionNotifier chatActionNotifier;
 
     @Override
     public boolean supports(String command) {
@@ -20,6 +22,7 @@ class RecommendCommandHandler implements BotCommandHandler {
 
     @Override
     public SendMessage handle(CommandContext context) {
+        chatActionNotifier.typing(context.chatId());
         var task = taskManagerService.enqueue(context.chatId(), null, "дай рекомендации");
         String displayId = task.getDisplayId();
         String text = "Дай мне пару минут!";

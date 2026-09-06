@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
@@ -32,13 +33,29 @@ public class UserIntentParser {
         if (trimmed.isEmpty()) {
             return UserIntent.empty();
         }
-        IntentClassification classification = classifyIntent(trimmed, profileSummary, language);
-        if (classification.isInformationIntent()) {
-            UserIntent infoIntent = classification.toInformationIntent();
-            logParsedIntent(trimmed, infoIntent, classification.reasoning());
-            return infoIntent;
+        if (isFastPathRecommendation(trimmed)) {
+            UserIntent fastPath = fastPathIntent();
+            logParsedIntent(trimmed, fastPath, List.of("fast-path: matched a known quick-recommend phrase, skipped LLM classification"));
+            return fastPath;
         }
-        return extractRecommendationIntent(trimmed, profileSummary, language, classification);
+        return extractIntent(trimmed, profileSummary, language);
+    }
+
+    /**
+     * Short, literal phrases that unambiguously mean "just recommend something" — skips the
+     * intent-extraction LLM call entirely for the most common low-information requests.
+     */
+    private static final Set<String> FAST_PATH_PHRASES = Set.of(
+            "дай рекомендации", "дай рекомендацию", "порекомендуй что-нибудь", "ещё", "еще", "ещё раз", "еще раз",
+            "surprise me", "another one", "one more", "more"
+    );
+
+    private boolean isFastPathRecommendation(String trimmed) {
+        return FAST_PATH_PHRASES.contains(trimmed.toLowerCase(Locale.ROOT));
+    }
+
+    private UserIntent fastPathIntent() {
+        return new UserIntent(List.of(), List.of(), List.of(), List.of(), null, "", "", IntentType.RECOMMENDATION, "", null, null);
     }
 
     private String buildUserPrompt(String userText,
@@ -50,7 +67,7 @@ public class UserIntentParser {
         if (profileSummary != null && !profileSummary.isBlank()) {
             builder.append("Profile summary:\n").append(profileSummary.trim()).append("\n");
         }
-        builder.append("Extract actors, genres, dislikes, vibe descriptors, runtime cap if mentioned, and a concise summary.");
+        builder.append("Classify the intent and extract actors, genres, dislikes, vibe descriptors, runtime cap if mentioned, and a concise summary.");
         return builder.toString();
     }
 
@@ -96,110 +113,9 @@ public class UserIntentParser {
         return text.replaceAll("\\s+", " ").trim();
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record IntentPayload(
-            @JsonProperty("actors") List<String> actors,
-            @JsonProperty("includeGenres") List<String> includeGenres,
-            @JsonProperty("excludeGenres") List<String> excludeGenres,
-            @JsonProperty("descriptors") List<String> descriptors,
-            @JsonProperty("runtimeMinutes") Integer runtimeMinutes,
-            @JsonProperty("rewrittenQuery") String rewrittenQuery,
-            @JsonProperty("summary") String summary,
-            @JsonProperty("intentType") String intentType,
-            @JsonProperty("requestedTitle") String requestedTitle,
-            @JsonProperty("releaseYearFrom") Integer releaseYearFrom,
-            @JsonProperty("reasoning") List<String> explanations
-    ) {
-        UserIntent toDomain() {
-            return new UserIntent(
-                    sanitizeList(actors),
-                    sanitizeList(includeGenres),
-                    sanitizeList(excludeGenres),
-                    sanitizeList(descriptors),
-                    runtimeMinutes,
-                    safeTrim(rewrittenQuery),
-                    safeTrim(summary),
-                    IntentType.fromString(intentType),
-                    safeTrim(requestedTitle),
-                    null,
-                    releaseYearFrom
-            );
-        }
-
-        private List<String> sanitizeList(List<String> source) {
-            if (source == null || source.isEmpty()) {
-                return List.of();
-            }
-            List<String> cleaned = new ArrayList<>();
-            for (String entry : source) {
-                String trimmed = safeTrim(entry);
-                if (!trimmed.isEmpty()) {
-                    cleaned.add(trimmed);
-                }
-            }
-            if (cleaned.isEmpty()) {
-                return List.of();
-            }
-            return cleaned.stream()
-                    .map(val -> val.length() <= 1 ? val.toUpperCase(Locale.ROOT) : val)
-                    .distinct()
-                    .collect(Collectors.toList());
-        }
-
-        private String safeTrim(String value) {
-            return value == null ? "" : value.trim();
-        }
-    }
-
-    private IntentClassification classifyIntent(String userText,
-                                                String profileSummary,
-                                                UserLanguage language) {
-        String prompt = buildClassificationPrompt(userText, profileSummary, language);
-        try {
-            String response = chatClient
-                    .prompt()
-                    .system(properties.getClassificationPrompt())
-                    .user(prompt)
-                    .call()
-                    .content();
-            log.debug("Intent classifier raw response: {}", sanitizeForLog(response));
-            String clean = stripCodeFence(response);
-            IntentClassificationPayload payload = objectMapper.readValue(clean, IntentClassificationPayload.class);
-            IntentClassification classification = payload.toDomain();
-            log.debug(
-                    "Intent classifier parsed '{}' as type={}, title='{}', year={}, recentFrom={}, summary='{}', reasoning={}",
-                    sanitizeForLog(userText),
-                    classification.intentType(),
-                    sanitizeForLog(classification.requestedTitle()),
-                    classification.requestedYear(),
-                    classification.releaseYearFrom(),
-                    sanitizeForLog(classification.summary()),
-                    classification.reasoning() == null || classification.reasoning().isEmpty() ? "<none>" : classification.reasoning()
-            );
-            return classification;
-        } catch (Exception ex) {
-            log.debug("Intent classification failed for '{}': {}", sanitizeForLog(userText), ex.getMessage());
-            return IntentClassification.recommendationFallback();
-        }
-    }
-
-    private String buildClassificationPrompt(String userText,
-                                             String profileSummary,
-                                             UserLanguage language) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("Language: ").append(language == null ? "en" : language.isoCode()).append("\n");
-        builder.append("User request:\n").append(userText).append("\n");
-        if (profileSummary != null && !profileSummary.isBlank()) {
-            builder.append("Profile summary:\n").append(profileSummary.trim()).append("\n");
-        }
-        builder.append("Classify whether user wants recommendations or information about a specific movie.");
-        return builder.toString();
-    }
-
-    private UserIntent extractRecommendationIntent(String userText,
-                                                   String profileSummary,
-                                                   UserLanguage language,
-                                                   IntentClassification classification) {
+    private UserIntent extractIntent(String userText,
+                                     String profileSummary,
+                                     UserLanguage language) {
         String userPrompt = buildUserPrompt(userText, profileSummary, language);
         try {
             String response = chatClient
@@ -211,30 +127,23 @@ public class UserIntentParser {
             log.debug("Intent parser raw response: {}", sanitizeForLog(response));
             String clean = stripCodeFence(response);
             IntentPayload payload = objectMapper.readValue(clean, IntentPayload.class);
-            UserIntent intent = applyRecency(payload.toDomain(), classification, userText);
+            UserIntent intent = payload.toDomain();
+            if (intent.intentType() == IntentType.RECOMMENDATION) {
+                intent = applyRecency(intent, userText);
+            }
             logParsedIntent(userText, intent, payload.explanations());
             return intent;
         } catch (Exception ex) {
-            log.debug("Failed to parse recommendation intent for '{}': {}", sanitizeForLog(userText), ex.getMessage());
-            if (classification != null && classification.hasSummary()) {
-                UserIntent fallback = applyRecency(classification.toRecommendationIntent(), classification, userText);
-                logParsedIntent(userText, fallback, classification.reasoning());
-                return fallback;
-            }
+            log.debug("Failed to parse intent for '{}': {}", sanitizeForLog(userText), ex.getMessage());
             return UserIntent.empty();
         }
     }
 
-    private UserIntent applyRecency(UserIntent intent,
-                                    IntentClassification classification,
-                                    String originalText) {
+    private UserIntent applyRecency(UserIntent intent, String originalText) {
         if (intent == null) {
             return null;
         }
         Integer desired = intent.releaseYearFrom();
-        if (desired == null && classification != null && classification.releaseYearFrom() != null) {
-            desired = classification.releaseYearFrom();
-        }
         if (desired == null) {
             desired = inferRecentYear(originalText);
         }
@@ -274,82 +183,74 @@ public class UserIntentParser {
             "recent", "latest", "fresh", "newest", "new ", "нов", "свеж", "последн", "самых свеж", "самые свеж"
     );
 
-    private record IntentClassification(IntentType intentType,
-                                        String requestedTitle,
-                                        Integer requestedYear,
-                                        Integer releaseYearFrom,
-                                        String summary,
-                                        List<String> reasoning) {
-        boolean isInformationIntent() {
-            return intentType == IntentType.INFORMATION && requestedTitle != null && !requestedTitle.isBlank();
-        }
-
-        boolean hasSummary() {
-            return summary != null && !summary.isBlank();
-        }
-
-        UserIntent toInformationIntent() {
-            String safeSummary = summary == null || summary.isBlank()
-                    ? "Information request about " + requestedTitle
-                    : summary;
-            return new UserIntent(
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    null,
-                    "",
-                    safeSummary,
-                    IntentType.INFORMATION,
-                    requestedTitle.trim(),
-                    requestedYear,
-                    null
-            );
-        }
-
-        UserIntent toRecommendationIntent() {
-            String safeSummary = summary == null ? "" : summary.trim();
-            return new UserIntent(
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    null,
-                    "",
-                    safeSummary,
-                    IntentType.RECOMMENDATION,
-                    "",
-                    null,
-                    releaseYearFrom
-            );
-        }
-
-        static IntentClassification recommendationFallback() {
-            return new IntentClassification(IntentType.RECOMMENDATION, "", null, null, "", List.of());
-        }
-    }
-
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record IntentClassificationPayload(
+    private record IntentPayload(
+            @JsonProperty("actors") List<String> actors,
+            @JsonProperty("includeGenres") List<String> includeGenres,
+            @JsonProperty("excludeGenres") List<String> excludeGenres,
+            @JsonProperty("descriptors") List<String> descriptors,
+            @JsonProperty("runtimeMinutes") Integer runtimeMinutes,
+            @JsonProperty("rewrittenQuery") String rewrittenQuery,
+            @JsonProperty("summary") String summary,
             @JsonProperty("intentType") String intentType,
             @JsonProperty("requestedTitle") String requestedTitle,
             @JsonProperty("requestedYear") Integer requestedYear,
             @JsonProperty("releaseYearFrom") Integer releaseYearFrom,
-            @JsonProperty("summary") String summary,
-            @JsonProperty("reasoning") List<String> reasoning
+            @JsonProperty("reasoning") List<String> explanations
     ) {
-        IntentClassification toDomain() {
-            return new IntentClassification(
-                    IntentType.fromString(intentType),
-                    safeTrim(requestedTitle),
-                    requestedYear,
-                    releaseYearFrom,
+        UserIntent toDomain() {
+            String title = safeTrim(requestedTitle);
+            if (IntentType.fromString(intentType) == IntentType.INFORMATION && !title.isEmpty()) {
+                String safeSummary = summary == null || summary.isBlank()
+                        ? "Information request about " + title
+                        : safeTrim(summary);
+                return new UserIntent(
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        null,
+                        "",
+                        safeSummary,
+                        IntentType.INFORMATION,
+                        title,
+                        requestedYear,
+                        null
+                );
+            }
+            return new UserIntent(
+                    sanitizeList(actors),
+                    sanitizeList(includeGenres),
+                    sanitizeList(excludeGenres),
+                    sanitizeList(descriptors),
+                    runtimeMinutes,
+                    safeTrim(rewrittenQuery),
                     safeTrim(summary),
-                    reasoning == null ? List.of() : reasoning.stream()
-                            .map(this::safeTrim)
-                            .filter(s -> !s.isEmpty())
-                            .toList()
+                    IntentType.RECOMMENDATION,
+                    title,
+                    requestedYear,
+                    releaseYearFrom
             );
+        }
+
+        private List<String> sanitizeList(List<String> source) {
+            if (source == null || source.isEmpty()) {
+                return List.of();
+            }
+            List<String> cleaned = new ArrayList<>();
+            for (String entry : source) {
+                String trimmed = safeTrim(entry);
+                if (!trimmed.isEmpty()) {
+                    cleaned.add(trimmed);
+                }
+            }
+            if (cleaned.isEmpty()) {
+                return List.of();
+            }
+            return cleaned.stream()
+                    .map(val -> val.length() <= 1 ? val.toUpperCase(Locale.ROOT) : val)
+                    .distinct()
+                    .collect(Collectors.toList());
         }
 
         private String safeTrim(String value) {

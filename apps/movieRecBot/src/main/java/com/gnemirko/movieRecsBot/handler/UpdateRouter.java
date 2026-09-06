@@ -4,6 +4,7 @@ import com.gnemirko.movieRecsBot.complaint.ReportButtonDecorator;
 import com.gnemirko.movieRecsBot.complaint.ReportIssueCallbackHandler;
 import com.gnemirko.movieRecsBot.handler.command.CommandContext;
 import com.gnemirko.movieRecsBot.handler.command.CommandDispatcher;
+import com.gnemirko.movieRecsBot.service.ChatActionNotifier;
 import com.gnemirko.movieRecsBot.service.TaskManagerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -19,9 +20,12 @@ public class UpdateRouter {
 
     private final MiniMenuCallbackHandler miniMenuCallbackHandler;
     private final ReportIssueCallbackHandler reportIssueCallbackHandler;
+    private final MovieFeedbackCallbackHandler movieFeedbackCallbackHandler;
+    private final MoreRecommendationsCallbackHandler moreRecommendationsCallbackHandler;
     private final AwaitingReplyHandler awaitingReplyHandler;
     private final CommandDispatcher commandDispatcher;
     private final TaskManagerService taskManagerService;
+    private final ChatActionNotifier chatActionNotifier;
 
     public BotApiMethod<?> handle(Update update) {
         if (update == null) return null;
@@ -31,6 +35,12 @@ public class UpdateRouter {
             String data = callbackQuery.getData();
             if (ReportButtonDecorator.REPORT_CALLBACK_DATA.equals(data)) {
                 return reportIssueCallbackHandler.handle(callbackQuery);
+            }
+            if (data != null && data.startsWith("rate:")) {
+                return movieFeedbackCallbackHandler.handle(callbackQuery);
+            }
+            if ("more:go".equals(data)) {
+                return moreRecommendationsCallbackHandler.handle(callbackQuery);
             }
             return miniMenuCallbackHandler.handle(callbackQuery);
         }
@@ -50,6 +60,7 @@ public class UpdateRouter {
                 return commandDispatcher.dispatch(context);
             }
 
+            chatActionNotifier.typing(chatId);
             var task = taskManagerService.enqueue(chatId, null, text);
             String displayId = task.getDisplayId();
             return SendMessage.builder()

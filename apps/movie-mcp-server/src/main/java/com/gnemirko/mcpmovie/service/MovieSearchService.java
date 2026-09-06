@@ -18,7 +18,9 @@ import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -115,6 +117,18 @@ public class MovieSearchService {
     private final ObjectMapper objectMapper;
     private final MovieMcpProperties properties;
 
+    private static final int MAX_CACHE_ENTRIES = 500;
+    private record CacheEntry(List<MovieContext> results, Instant expiresAt) {
+    }
+
+    private final Map<String, CacheEntry> searchCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
+                    return size() > MAX_CACHE_ENTRIES;
+                }
+            });
+
     public MovieSearchService(NamedParameterJdbcTemplate jdbcTemplate,
                               EmbeddingModel embeddingModel,
                               ObjectMapper objectMapper,
@@ -127,6 +141,19 @@ public class MovieSearchService {
 
     @Transactional(readOnly = true)
     public List<MovieContext> search(MovieSearchRequest request) {
+        String cacheKey = request.toString();
+        CacheEntry cached = searchCache.get(cacheKey);
+        Instant now = Instant.now();
+        if (cached != null && cached.expiresAt().isAfter(now)) {
+            log.debug("Search cache hit for '{}'", request.query());
+            return cached.results();
+        }
+        List<MovieContext> results = doSearch(request);
+        searchCache.put(cacheKey, new CacheEntry(results, now.plusSeconds(properties.cacheTtlSeconds())));
+        return results;
+    }
+
+    private List<MovieContext> doSearch(MovieSearchRequest request) {
         int max = Math.max(1, properties.maxResults());
         int requested = request.limit() == null ? max : Math.max(1, request.limit());
         int limit = Math.min(requested, max);

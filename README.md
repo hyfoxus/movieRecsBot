@@ -76,6 +76,8 @@ Open both `.env` files in your editor and set the values described below (Telegr
 | `OPENAI_MODEL`             | Chat model identifier (default `gpt-4o-mini`).                             |
 | `MCP_BASE_URL`             | Internal URL the bot uses to talk to the MCP server (default `http://imdb-mcp:8082`). |
 
+`TELEGRAM_WEBHOOK_SECRET` is not set via `.env` — like the bot token, it's delivered as a Docker secret (see step 3). Telegram echoes it back as the `X-Telegram-Bot-Api-Secret-Token` header on every webhook call, and the bot rejects any POST to the webhook path that doesn't carry the matching value. The app refuses to start without it once webhooks are enabled.
+
 #### Optional: Google Sheets complaint logging
 
 | Variable                          | Description                                                                                                  |
@@ -104,17 +106,20 @@ Open both `.env` files in your editor and set the values described below (Telegr
 
 ## 3. Create Docker Secrets
 
-Only the Telegram token is provided via Docker secrets. Create the file inside `secrets/` with **only** the secret value and no trailing newline.
+The Telegram bot token and the webhook secret are provided via Docker secrets. Create both files inside `secrets/` with **only** the secret value and no trailing newline.
 
 ```bash
 mkdir -p secrets
-printf '%s' 'your-telegram-bot-token'    > secrets/TELEGRAM_BOT_TOKEN
+printf '%s' 'your-telegram-bot-token'          > secrets/TELEGRAM_BOT_TOKEN
+printf '%s' "$(openssl rand -hex 32)"          > secrets/TELEGRAM_WEBHOOK_SECRET
 ```
+
+`TELEGRAM_WEBHOOK_SECRET` is an arbitrary token you generate yourself (1–256 chars, letters/digits/`_`/`-` per Telegram's `secret_token` rules) — it isn't issued by Telegram. On boot, the bot passes it to Telegram's `setWebhook` call, and Telegram then includes it as the `X-Telegram-Bot-Api-Secret-Token` header on every update it delivers. The bot verifies that header on every incoming webhook POST and rejects anything that doesn't match — without this, anyone who discovers the webhook URL could send forged updates as if they came from Telegram.
 
 Recommendations:
 - Store the files securely (password manager, encrypted volume, etc.).
 - Add `secrets/` to your `.gitignore` (already done in this repo) so you never commit real credentials.
-- If you rotate the token, update the file and restart the stack.
+- If you rotate either secret, update the file and restart the stack — `setWebhook` is re-registered on every boot, so a redeploy is all rotation takes.
 
 Database credentials now live in `apps/movieRecBot/.env` (see step 2); update that file whenever you change the password.
 
@@ -159,6 +164,7 @@ Common commands:
    export OPENAI_BASE_URL=https://api.openai.com
    export OPENAI_MODEL=gpt-4o-mini
    export TELEGRAM_BOT_TOKEN=...
+   export TELEGRAM_WEBHOOK_SECRET=...
    export SPRING_PROFILES_ACTIVE=postgres
    ```
 2. Build and run the app:

@@ -24,11 +24,19 @@ public class TelegramConfig {
     @Value("${telegram.bot.token}")
     private String botToken;
 
+    @Value("${telegram.bot.webhook-secret:}")
+    private String webhookSecret;
+
     @PostConstruct
     public void init() {
         if (botToken == null || botToken.isBlank()) {
             log.error("Telegram bot token is missing. Set TELEGRAM_BOT_TOKEN before starting the bot.");
             throw new IllegalStateException("Telegram bot token is missing");
+        }
+        if (webhookSecret == null || webhookSecret.isBlank()) {
+            log.error("Telegram webhook secret is missing. Set TELEGRAM_WEBHOOK_SECRET before starting the bot " +
+                    "so incoming updates can be verified as genuinely coming from Telegram.");
+            throw new IllegalStateException("Telegram webhook secret is missing");
         }
 
         String url = buildWebhookUrl(webhookUrl, webhookPath);
@@ -46,15 +54,20 @@ public class TelegramConfig {
                 }
             };
 
-            sender.execute(SetWebhook.builder()
-                    .url(url)
-                    .build());
+            sender.execute(buildSetWebhook(url));
 
             log.info("✓ Telegram webhook registered at {}", url);
         } catch (TelegramApiException e) {
             log.error("Failed to set webhook", e);
             throw new RuntimeException("Failed to configure Telegram webhook", e);
         }
+    }
+
+    SetWebhook buildSetWebhook(String url) {
+        return SetWebhook.builder()
+                .url(url)
+                .secretToken(webhookSecret)
+                .build();
     }
 
     private static String buildWebhookUrl(String base, String path) {

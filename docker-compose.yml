@@ -50,7 +50,10 @@ services:
       - "${BOT_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
     secrets:
-      - movie_recs_telegram_bot_token
+      - source: movie_recs_telegram_bot_token
+        target: telegram_bot_token
+      - source: movie_recs_telegram_webhook_secret
+        target: telegram_webhook_secret
     networks:
       - monorepo-net
 
@@ -164,3 +167,5 @@ volumes:
 secrets:
   movie_recs_telegram_bot_token:
     file: ./secrets/TELEGRAM_BOT_TOKEN
+  movie_recs_telegram_webhook_secret:
+    file: ./secrets/TELEGRAM_WEBHOOK_SECRET

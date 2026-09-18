@@ -35,6 +35,6 @@ public class OllamaClient implements CompletionClient {
                 })
                 .map(GenerateResponse::response)
                 .map(String::trim)
-                .block(properties.getTimeout());
+                .block();
     }
 }

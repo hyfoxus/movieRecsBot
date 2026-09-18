@@ -85,18 +85,111 @@ class NormalizationServiceTest {
         assertThat(client.callCount()).isEqualTo(1);
     }
 
+    @Test
+    void fallsBackToUnknownWhenDetectionCallThrows() {
+        client.enqueueError(new RuntimeException("ollama unreachable"));
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("bonjour");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.detectedLanguage()).isEqualTo("unknown");
+        assertThat(response.translationApplied()).isFalse();
+        assertThat(response.normalizedText()).isEqualTo("bonjour");
+        assertThat(response.notes()).isEqualTo("Unable to determine language");
+        assertThat(client.callCount()).isEqualTo(1);
+    }
+
+    @Test
+    void fallsBackToUnknownWhenDetectionResponseIsNotJson() {
+        client.enqueue("I'm sorry, I cannot help with that.");
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("hello");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.detectedLanguage()).isEqualTo("unknown");
+        assertThat(response.translationApplied()).isFalse();
+    }
+
+    @Test
+    void detectionResponseMissingOptionalFieldsStillParses() {
+        client.enqueue("{\"language\":\"FR\"}");
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("bonjour le monde");
+        request.setTargetLanguage("en");
+        client.enqueue("Hello world");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.detectedLanguage()).isEqualTo("fr");
+        assertThat(response.translationApplied()).isTrue();
+    }
+
+    @Test
+    void fallsBackToOriginalTextWhenTranslationCallThrows() {
+        client.enqueue("{\"language\":\"ru\",\"confidence\":0.95}");
+        client.enqueueError(new RuntimeException("translation backend down"));
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("привет мир");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.translationApplied()).isTrue();
+        assertThat(response.normalizedText()).isEqualTo("привет мир");
+        assertThat(response.notes()).isEqualTo("Translated from ru to en");
+    }
+
+    @Test
+    void fallsBackToOriginalTextWhenTranslationResponseIsBlank() {
+        client.enqueue("{\"language\":\"ru\",\"confidence\":0.95}");
+        client.enqueue("   ");
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("привет мир");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.normalizedText()).isEqualTo("привет мир");
+    }
+
+    @Test
+    void translatesRegardlessOfLowDetectionConfidenceAsLongAsLanguageDiffers() {
+        client.enqueue("{\"language\":\"de\",\"confidence\":0.05}");
+        client.enqueue("Translated anyway");
+        NormalizationRequest request = new NormalizationRequest();
+        request.setText("guten tag");
+        request.setTargetLanguage("en");
+
+        NormalizationResponse response = service.normalize(request);
+
+        assertThat(response.translationApplied()).isTrue();
+        assertThat(response.normalizedText()).isEqualTo("Translated anyway");
+    }
+
     private static final class DummyCompletionClient implements CompletionClient {
-        private final Deque<String> responses = new ArrayDeque<>();
+        private final Deque<Object> responses = new ArrayDeque<>();
         private final Deque<Call> calls = new ArrayDeque<>();
 
         void enqueue(String response) {
             responses.addLast(response);
         }
 
+        void enqueueError(RuntimeException error) {
+            responses.addLast(error);
+        }
+
         @Override
         public String complete(String model, String prompt) {
             calls.addLast(new Call(model, prompt));
-            return responses.pollFirst();
+            Object next = responses.pollFirst();
+            if (next instanceof RuntimeException error) {
+                throw error;
+            }
+            return (String) next;
         }
 
         int callCount() {
